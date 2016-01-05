@@ -17,7 +17,7 @@ import (
 )
 
 func TestSrv (t *testing.T) {
-    if !RunSingleton() {
+    if !StartSingleton() {
         t.Failed()
     }  
     
