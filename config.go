@@ -22,7 +22,7 @@ func onCfgChange(cfg *ini.IniCfg, changeCount int) {
     Log.Info("Config change detected (%s) sequence: %d", cfg.Name, changeCount)
     cfgApp(cfg)
     cfgCrashReports(cfg)
-    cfgNet(cfg)
+    cfgNet(cfg, changeCount)
 }
 
 func cfgApp(cfg *ini.IniCfg) {
@@ -87,7 +87,7 @@ func cfgCrashReports(cfg *ini.IniCfg) {
     }
 }
 
-func cfgNet(cfg *ini.IniCfg) {
+func cfgNet(cfg *ini.IniCfg, changeCount int) {
     sec := cfg.GetSection("net")
 
     val            := sec.GetFirstVal("PrivateHttpEnabled")
@@ -106,5 +106,16 @@ func cfgNet(cfg *ini.IniCfg) {
     publicPort := val.GetValInt(0, DefaultPublicHttpPort)
     Log.Debug("PublicHttpPort: %d", publicPort)
 
-    Http.Configure(privateEnabled, privatePort, publicEnabled, publicPort)
+    // force "restart" on first config parse. This ensures that
+    // that the http listeners are intialized if a user starts the
+    // server with all default vaules.
+    forceRestart := (changeCount == 0)
+
+    Http.Configure(
+        privateEnabled, 
+        privatePort, 
+        publicEnabled, 
+        publicPort, 
+        forceRestart,
+    )
 }

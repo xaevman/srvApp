@@ -84,14 +84,15 @@ type HttpSrv struct {
 func (this *HttpSrv) Configure(
     privateEnabled  bool,
     privatePort     int,
-    publicEnabled bool,
-    publicPort    int,
+    publicEnabled   bool,
+    publicPort      int,
+    forceRestart    bool,
 ) {
-    privateChanged  := false
-    publicChanged := false
-
     this.configLock.Lock()
     defer this.configLock.Unlock()
+
+    privateChanged := false
+    publicChanged  := false
 
     if this.privateEnabled != privateEnabled {
         this.privateEnabled = privateEnabled
@@ -113,11 +114,11 @@ func (this *HttpSrv) Configure(
         publicChanged = true
     }
 
-    if privateChanged {
+    if privateChanged || forceRestart {
         this.restartPrivateHttp()
     }
 
-    if publicChanged {
+    if publicChanged || forceRestart {
         this.restartPublicHttp()
     }
 }
