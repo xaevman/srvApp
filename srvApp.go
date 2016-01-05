@@ -15,13 +15,25 @@
 package srvApp
 
 import (
+    "flag"
     "fmt"
+    "net/http"
+    "net/http/pprof"
     "os"
     "os/signal"
+    "runtime"
     
     "github.com/xaevman/app"
     "github.com/xaevman/crash"
     "github.com/xaevman/ini"
+)
+
+// RunMode enum
+const (
+    CMDLINE = iota
+    RUN_SVC
+    INST_SVC
+    UNINST_SVC
 )
 
 // AppConfig represents the application's configuration file.
@@ -60,43 +72,47 @@ var LogDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
 
 // Internal vars.
 var (
-    shutdownChan = make(chan bool, 0)
+    crashChan        = make(chan bool, 0)
+    modeInstallSvc   = false
+    modeRunSvc       = false
+    modeUninstallSvc = false
+    runMode          byte
+    shutdownChan     = make(chan bool, 0)
+    shuttingDown     = false
 )
 
-// BlockUntilShutdown does exactly what it sounds like, it blocks until
+
+// Init initializes the server appplication. Initializations sets up signal
+// handling, arg parsing, run mode, initializes a default config file, 
+// file and email crash handlers, both private and public facing http server
+// listeners, and some default debugging Uri handlers.
+func Init() {
+    Log = NewSrvLog()
+    parseFlags()
+    run()
+}
+
+// blockUntilShutdown does exactly what it sounds like, it blocks until
 // the shutdown signal is received, then calls Shutdown.
-func BlockUntilShutdown() {
+func blockUntilShutdown() {
     <-shutdownChan
-    Shutdown()
+    shutdown()
 }
 
-// Shutdown handles shutting down the server process, closing open logs, 
-// and terminating subprocesses.
-func Shutdown() bool {
-    Log.Close()
-    
-    err := app.DeletePidFile()
-    if err != nil {
-        Log.Error("%v\n", err)
-        return false
-    }
-    
-    return true
-}
+// catchCrash
+func catchCrash() {
+    go func() {
+        defer crash.HandleAll()
 
-// StartSingleton intializes the server process, attempting to make sure
-// that it is the only such process running.
-func StartSingleton () bool {
-    AppProcess = app.GetRunStatus()
-    if AppProcess != nil {
-        Log.Error(
-            "Application already running under PID %d\n", 
-            AppProcess.Pid,
-        )
-        return false
-    }
-    
-    return true
+        select {
+        case <-crashChan:
+            if shuttingDown {
+                return
+            }
+
+            panic("User initiated crash")
+        }
+    }()
 }
 
 // catchSigInt 
@@ -104,20 +120,51 @@ func catchSigInt() {
     c := make(chan os.Signal, 1)
     signal.Notify(c, os.Interrupt)
     go func(){
+        defer crash.HandleAll()
+
         select {
         case <-c:
-            NotifyShutdown()
-            shutdownChan<- true
+            signalShutdown()
         }
     }()
 }
 
-// module initialization
-func init () { 
+// parseFlags
+func parseFlags() {
+    // windows-specific options    
+    if runtime.GOOS == "windows" {
+        flag.BoolVar(
+            &modeRunSvc, 
+            "runSvc", 
+            false,
+            "Run the application as a windows service.",
+        )
+
+        flag.BoolVar(
+            &modeInstallSvc, 
+            "install", 
+            false,
+            "Install the application as a windows service.",
+        )
+
+        flag.BoolVar(
+            &modeUninstallSvc, 
+            "uninstall", 
+            false,
+            "Uninstall the application's service instance.",
+        )
+    }
+
+    flag.Parse()
+
+    setRunMode()
+}
+
+// preStart
+func preStart() {
     catchSigInt()
 
     AppConfig = ini.New(fmt.Sprintf("%s/%s.ini", ConfigDir, app.GetName()))
-    Log = NewSrvLog()
     Log.SetDebugLogsEnabled(false)
 
     FileCrashHandler = new(crash.FileHandler)
@@ -128,8 +175,75 @@ func init () {
     crash.AddHandler(EmailCrashHandler)
 
     initNet()
+    catchCrash()
     
-    Http.RegisterHandler("/data/handlers", OnPrivHandlerUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/cmd/crash/", OnCrashUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/cmd/shutdown/", OnShutdownUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/netinfo/", OnNetInfoUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/", http.HandlerFunc(pprof.Index), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/profile", http.HandlerFunc(pprof.Profile), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/trace", http.HandlerFunc(pprof.Trace), PRIVATE_HANDLER)
 
     ini.Subscribe(AppConfig, onCfgChange)
+}
+
+// setRunMode
+func setRunMode() {
+    if modeRunSvc {
+        runMode = RUN_SVC
+    } else if modeInstallSvc {
+        runMode = INST_SVC
+    } else if modeUninstallSvc {
+        runMode = UNINST_SVC
+    } else {
+        runMode = CMDLINE
+    }
+}
+
+// shutdown handles shutting down the server process, closing open logs, 
+// and terminating subprocesses.
+func shutdown() bool {
+    notifyShutdown()
+
+    Log.Close()
+
+    shuttingDown = true
+    
+    close(shutdownChan)
+    close(crashChan)
+
+    err := app.DeletePidFile()
+    if err != nil {
+        Log.Error("%v\n", err)
+        return false
+    }
+    
+    return true
+}
+
+// signalShutdown
+func signalShutdown() {
+    go func() {
+        defer crash.HandleAll()
+        shutdownChan<- true
+    }()
+}
+
+// startSingleton intializes the server process, attempting to make sure
+// that it is the only such process running.
+func startSingleton() bool {
+    preStart()
+
+    AppProcess = app.GetRunStatus()
+    if AppProcess != nil {
+        Log.Error(
+            "Application already running under PID %d\n", 
+            AppProcess.Pid,
+        )
+        return false
+    }
+    
+    return true
 }

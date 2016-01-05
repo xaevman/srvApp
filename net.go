@@ -1,3 +1,15 @@
+//  ---------------------------------------------------------------------------
+//
+//  net.go
+//
+//  Copyright (c) 2015, Jared Chavez. 
+//  All rights reserved.
+//
+//  Use of this source code is governed by a BSD-style
+//  license that can be found in the LICENSE file.
+//
+//  -----------
+
 package srvApp
 
 import (
@@ -29,7 +41,7 @@ type srvAppListener struct {
     closing  int32
 }
 
-func (this *srvAppListener) Close() {
+func (this *srvAppListener) close() {
     atomic.StoreInt32(&this.closing, 1)
     err := this.listener.Close()
     if err != nil {
@@ -37,12 +49,12 @@ func (this *srvAppListener) Close() {
     }
 }
 
-func (this *srvAppListener) Closing() bool {
+func (this *srvAppListener) isClosing() bool {
     val := atomic.LoadInt32(&this.closing)
     return val == 1
 }
 
-func (this *srvAppListener) Listen(addr string) error {
+func (this *srvAppListener) listen(addr string) error {
     ln, err := net.Listen("tcp", addr)
     if err != nil {
         return err
@@ -110,26 +122,43 @@ func (this *HttpSrv) Configure(
     }
 }
 
-func (this *HttpSrv) GetHandlerKeys() map[string][]string {
+func (this *HttpSrv) GetNetInfo() map[string]map[string][]string {
     this.configLock.RLock()
     defer this.configLock.RUnlock()
 
-    priv := make([]string, 0, len(this.privateHandlers))
-    pub  := make([]string, 0, len(this.publicHandlers))
+    privHandlers := make([]string, 0, len(this.privateHandlers))
+    privServers  := make([]string, 0, len(this.privateListeners))
+    pubHandlers  := make([]string, 0, len(this.publicHandlers))
+    pubServers   := make([]string, 0, len(this.publicListeners))
 
     for k, _ := range this.privateHandlers {
-        priv = append(priv, k)
+        privHandlers = append(privHandlers, k)
     }
-    sort.Strings(priv)
+    sort.Strings(privHandlers)
+
+    for k, _ := range this.privateListeners {
+        privServers = append(privServers, k)
+    }
+    sort.Strings(privServers)
 
     for k, _ := range this.publicHandlers {
-        pub = append(pub, k)
+        pubHandlers = append(pubHandlers, k)
     }
-    sort.Strings(pub)
+    sort.Strings(pubHandlers)
 
-    handlers           := make(map[string][]string)
-    handlers["private"] = priv
-    handlers["public"]  = pub
+    for k, _ := range this.publicListeners {
+        pubServers = append(pubServers, k)
+    }
+    sort.Strings(pubServers)
+
+    handlers           := make(map[string]map[string][]string)
+    handlers["private"] = make(map[string][]string)
+    handlers["public"]  = make(map[string][]string)
+
+    handlers["private"]["servers"]  = privServers
+    handlers["private"]["handlers"] = privHandlers
+    handlers["public"]["servers"]   = pubServers
+    handlers["public"]["handlers"]  = pubHandlers
 
     return handlers
 }
@@ -158,7 +187,7 @@ func (this *HttpSrv) restartPrivateHttp() {
 
     // shut down old listeners
     for k, _ := range this.privateListeners {
-        this.privateListeners[k].Close()
+        this.privateListeners[k].close()
         delete(this.privateListeners, k)
     }
 
@@ -169,7 +198,7 @@ func (this *HttpSrv) restartPrivateHttp() {
 
     for i := range addrList {
         ln  := &srvAppListener{}
-        err := ln.Listen(addrList[i])
+        err := ln.listen(addrList[i])
         if err != nil {
             Log.Error("%v", err)
             continue
@@ -182,7 +211,7 @@ func (this *HttpSrv) restartPrivateHttp() {
             defer crash.HandleAll()
 
             err := this.privateSrv.Serve(ln.listener)
-            if ln.Closing() {
+            if ln.isClosing() {
                 return
             }
 
@@ -219,7 +248,7 @@ func (this *HttpSrv) restartPublicHttp() {
 
     // shut down old listeners
     for k, _ := range this.publicListeners {
-        this.publicListeners[k].Close()
+        this.publicListeners[k].close()
         delete(this.publicListeners, k)
     }
 
@@ -230,7 +259,7 @@ func (this *HttpSrv) restartPublicHttp() {
 
     for i := range addrList {
         ln  := &srvAppListener{}
-        err := ln.Listen(addrList[i])
+        err := ln.listen(addrList[i])
         if err != nil {
             Log.Error("%v", err)
             continue
@@ -243,7 +272,7 @@ func (this *HttpSrv) restartPublicHttp() {
             defer crash.HandleAll()
 
             err := this.publicSrv.Serve(ln.listener)
-            if ln.Closing() {
+            if ln.isClosing() {
                 return
             }
 
@@ -267,12 +296,10 @@ func (this *HttpSrv) RegisterHandler(
         this.privateHandlers[path] = f
         this.privateMux.HandleFunc(path, f)
         Log.Info("Private HttpHandler %s registered", path)
-        break
     case PUBLIC_HANDLER:
         this.publicHandlers[path] = f
         this.publicMux.HandleFunc(path, f)
         Log.Info("Public HttpHandler %s registered", path)
-        break
     case ALL_HANDLER:
         this.privateHandlers[path] = f
         this.privateMux.HandleFunc(path, f)
@@ -280,10 +307,8 @@ func (this *HttpSrv) RegisterHandler(
         this.publicHandlers[path] = f
         this.publicMux.HandleFunc(path, f)
         Log.Info("Public HttpHandler %s registered", path)
-        break
     default:
         Log.Error("Unknown handler type (%d)", handlerType)
-        break
     }
 }
 

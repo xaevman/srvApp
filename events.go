@@ -1,3 +1,15 @@
+//  ---------------------------------------------------------------------------
+//
+//  events.go
+//
+//  Copyright (c) 2015, Jared Chavez. 
+//  All rights reserved.
+//
+//  Use of this source code is governed by a BSD-style
+//  license that can be found in the LICENSE file.
+//
+//  -----------
+
 package srvApp
 
 import (
@@ -20,7 +32,7 @@ func ShutdownNotify(f func()) {
 
 // NotifyShutdown loops through the list of shutdown subscriber functions,
 // calling them all in the order they were added.
-func NotifyShutdown() {
+func notifyShutdown() {
     shutdownLock.RLock()
     defer shutdownLock.RUnlock()
 
