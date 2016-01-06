@@ -18,6 +18,7 @@ import (
     "fmt"
     "net"
     "net/http"
+    "net/http/pprof"
     "sort"
     "sync"
     "sync/atomic"
@@ -72,6 +73,7 @@ type HttpSrv struct {
     privateListeners map[string]*srvAppListener
     privateMux       *http.ServeMux
     privateSrv       *http.Server
+    privateStaticDir string
     configLock       sync.RWMutex
     publicEnabled    bool
     publicPort       int
@@ -79,14 +81,17 @@ type HttpSrv struct {
     publicListeners  map[string]*srvAppListener
     publicMux        *http.ServeMux
     publicSrv        *http.Server
+    publicStaticDir  string
 }
 
 func (this *HttpSrv) Configure(
-    privateEnabled  bool,
-    privatePort     int,
-    publicEnabled   bool,
-    publicPort      int,
-    forceRestart    bool,
+    privateEnabled   bool,
+    privatePort      int,
+    privateStaticDir string,
+    publicEnabled    bool,
+    publicPort       int,
+    publicStaticDir  string,
+    forceRestart     bool,
 ) {
     this.configLock.Lock()
     defer this.configLock.Unlock()
@@ -103,6 +108,10 @@ func (this *HttpSrv) Configure(
         this.privatePort = privatePort
         privateChanged = true
     }
+
+    if this.privateStaticDir != privateStaticDir {
+        this.privateStaticDir = privateStaticDir
+    }
     
     if this.publicEnabled != publicEnabled {
         this.publicEnabled = publicEnabled
@@ -114,6 +123,10 @@ func (this *HttpSrv) Configure(
         publicChanged = true
     }
 
+    if this.publicStaticDir != publicStaticDir {
+        this.publicStaticDir = publicStaticDir
+    }
+
     if privateChanged || forceRestart {
         this.restartPrivateHttp()
     }
@@ -123,7 +136,7 @@ func (this *HttpSrv) Configure(
     }
 }
 
-func (this *HttpSrv) GetNetInfo() map[string]map[string][]string {
+func (this *HttpSrv) getNetInfo() map[string]map[string][]string {
     this.configLock.RLock()
     defer this.configLock.RUnlock()
 
@@ -162,6 +175,20 @@ func (this *HttpSrv) GetNetInfo() map[string]map[string][]string {
     handlers["public"]["handlers"]  = pubHandlers
 
     return handlers
+}
+
+func (this *HttpSrv) privStaticDir() string {
+    this.configLock.RLock()
+    defer this.configLock.RUnlock()
+
+    return this.privateStaticDir
+}
+
+func (this *HttpSrv) pubStaticDir() string {
+    this.configLock.RLock()
+    defer this.configLock.RUnlock()
+
+    return this.publicStaticDir
 }
 
 func (this *HttpSrv) restartPrivateHttp() {
@@ -383,4 +410,16 @@ func initNet() {
     }
 
     PrivateNets = append(PrivateNets, n1, n2, n3, n4)
+
+    // configure http handlers
+    Http.RegisterHandler("/", OnPrivStaticSrvUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/", OnPubStaticSrvUri, PUBLIC_HANDLER)
+    Http.RegisterHandler("/cmd/crash/", OnCrashUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/cmd/shutdown/", OnShutdownUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/netinfo/", OnNetInfoUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/", http.HandlerFunc(pprof.Index), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/profile", http.HandlerFunc(pprof.Profile), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol), PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/pprof/trace", http.HandlerFunc(pprof.Trace), PRIVATE_HANDLER)
 }

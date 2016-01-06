@@ -17,8 +17,6 @@ package srvApp
 import (
     "flag"
     "fmt"
-    "net/http"
-    "net/http/pprof"
     "os"
     "os/signal"
     "runtime"
@@ -87,8 +85,8 @@ var (
 // file and email crash handlers, both private and public facing http server
 // listeners, and some default debugging Uri handlers.
 func Init() {
-    Log = NewSrvLog()
     parseFlags()
+    Log = NewSrvLog()
 }
 
 // Run executes the application in whatever run mode is configured.
@@ -178,18 +176,9 @@ func preStart() {
     EmailCrashHandler = crash.NewEmailHandler()
     crash.AddHandler(EmailCrashHandler)
 
-    initNet()
     catchCrash()
+    initNet()
     
-    Http.RegisterHandler("/cmd/crash/", OnCrashUri, PRIVATE_HANDLER)
-    Http.RegisterHandler("/cmd/shutdown/", OnShutdownUri, PRIVATE_HANDLER)
-    Http.RegisterHandler("/debug/netinfo/", OnNetInfoUri, PRIVATE_HANDLER)
-    Http.RegisterHandler("/debug/pprof/", http.HandlerFunc(pprof.Index), PRIVATE_HANDLER)
-    Http.RegisterHandler("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline), PRIVATE_HANDLER)
-    Http.RegisterHandler("/debug/pprof/profile", http.HandlerFunc(pprof.Profile), PRIVATE_HANDLER)
-    Http.RegisterHandler("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol), PRIVATE_HANDLER)
-    Http.RegisterHandler("/debug/pprof/trace", http.HandlerFunc(pprof.Trace), PRIVATE_HANDLER)
-
     ini.Subscribe(AppConfig, onCfgChange)
 }
 

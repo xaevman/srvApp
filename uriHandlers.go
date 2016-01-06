@@ -16,19 +16,65 @@ import (
     "github.com/xaevman/crash"
 
     "encoding/json"
+    "fmt"
     "net/http"
     "time"
 )
 
+func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
+    resp.Write([]byte("Crash initiated\n"))
+
+    Log.Info("Crash initiated via http request")
+
+    go func() {
+        defer crash.HandleAll()
+
+        <-time.After(2 * time.Second)
+        crashChan<- true
+    }()
+}
+
 func OnNetInfoUri(resp http.ResponseWriter, req *http.Request) {
-    handlers  := Http.GetNetInfo()
+    handlers  := Http.getNetInfo()
     data, err := json.MarshalIndent(&handlers, "", "    ")
     if err != nil {
-        resp.WriteHeader(http.StatusInternalServerError)
+        http.Error(
+            resp, 
+            fmt.Sprintf("%d : Internal Error", http.StatusInternalServerError),
+            http.StatusInternalServerError,
+        )
         return
     }
 
     resp.Write(data)
+}
+
+func OnPrivStaticSrvUri(resp http.ResponseWriter, req *http.Request) {
+    srcDir := Http.privStaticDir()
+    if srcDir == "" {
+        http.Error(
+            resp, 
+            fmt.Sprintf("%d : Not Found", http.StatusNotFound),
+            http.StatusNotFound,
+        )
+        return
+    }
+    
+    serveStaticFile(resp, req, srcDir)
+}
+
+func OnPubStaticSrvUri(resp http.ResponseWriter, req *http.Request) {
+    srcDir := Http.pubStaticDir()
+    if srcDir == "" {
+        http.Error(
+            resp, 
+            fmt.Sprintf("%d : Not Found", http.StatusNotFound),
+            http.StatusNotFound,
+        )
+        return
+    }
+
+    serveStaticFile(resp, req, srcDir)
 }
 
 func OnShutdownUri(resp http.ResponseWriter, req *http.Request) {
@@ -44,15 +90,6 @@ func OnShutdownUri(resp http.ResponseWriter, req *http.Request) {
     }()
 }
 
-func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
-    resp.Write([]byte("Crash initiated\n"))
+func serveStaticFile(resp http.ResponseWriter, req *http.Request, srcDir string) {
 
-    Log.Info("Crash initiated via http request")
-
-    go func() {
-        defer crash.HandleAll()
-
-        <-time.After(2 * time.Second)
-        crashChan<- true
-    }()
 }

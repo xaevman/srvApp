@@ -98,6 +98,10 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
     privatePort := val.GetValInt(0, DefaultPrivateHttpPort)
     Log.Debug("PrivateHttpPort: %d", privatePort)
 
+    val               = sec.GetFirstVal("PrivateStaticDir")
+    privateStaticDir := val.GetValStr(0, DefaultPrivateStaticDir)
+    Log.Debug("PrivateStaticDir: %s", privateStaticDir)
+
     val  = sec.GetFirstVal("PublicHttpEnabled")
     publicEnabled := val.GetValBool(0, DefaultPublicHttpEnabled)
     Log.Debug("PublicHttpEnabled: %t", publicEnabled)
@@ -105,6 +109,10 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
     val        = sec.GetFirstVal("PublicHttpPort")
     publicPort := val.GetValInt(0, DefaultPublicHttpPort)
     Log.Debug("PublicHttpPort: %d", publicPort)
+
+    val              = sec.GetFirstVal("PublicStaticDir")
+    publicStaticDir := val.GetValStr(0, DefaultPublicStaticDir)
+    Log.Debug("PUblicStaticDir: %s", publicStaticDir)
 
     // force "restart" on first config parse. This ensures that
     // that the http listeners are intialized if a user starts the
@@ -114,8 +122,10 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
     Http.Configure(
         privateEnabled, 
         privatePort, 
+        privateStaticDir,
         publicEnabled, 
         publicPort, 
+        publicStaticDir,
         forceRestart,
     )
 }
