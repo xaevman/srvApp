@@ -89,6 +89,10 @@ var (
 func Init() {
     Log = NewSrvLog()
     parseFlags()
+}
+
+// Run executes the application in whatever run mode is configured.
+func Run() {
     run()
 }
 
