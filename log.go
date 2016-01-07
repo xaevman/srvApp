@@ -26,6 +26,8 @@ type SrvLog struct {
 
 // NewSrvLog returns a new instance of a SrvLog object.
 func NewSrvLog() *SrvLog {
+    flog.FlogCallDepth = 4
+    
     obj := &SrvLog {
         dLog : flog.New("debug", LogDir, flog.BufferedFile),
         eLog : flog.New("error", LogDir, flog.DirectFile),

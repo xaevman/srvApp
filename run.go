@@ -14,10 +14,14 @@
 
 package srvApp
 
-func run() {
-    if !startSingleton() {
-        shutdownChan<- true
-    }
+func afterFlags() {}
 
-    blockUntilShutdown()
+func run() {
+    if initComplete {
+        if !startSingleton() {
+            shutdownChan<- true
+        }
+
+        blockUntilShutdown()
+    }
 }

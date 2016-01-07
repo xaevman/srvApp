@@ -20,6 +20,7 @@ import (
     "os"
     "os/signal"
     "runtime"
+    "sync"
     
     "github.com/xaevman/app"
     "github.com/xaevman/crash"
@@ -74,7 +75,8 @@ var (
     modeInstallSvc   = false
     modeRunSvc       = false
     modeUninstallSvc = false
-    runMode          byte
+    runLock            sync.Mutex
+    runMode            byte
     shutdownChan     = make(chan bool, 0)
     shuttingDown     = false
 )
@@ -85,12 +87,46 @@ var (
 // file and email crash handlers, both private and public facing http server
 // listeners, and some default debugging Uri handlers.
 func Init() {
+    runLock.Lock()
+    defer runLock.Unlock()
+
     parseFlags()
     Log = NewSrvLog()
+
+    afterFlags()
+    if shuttingDown {
+        return
+    }
+
+    AppConfig = ini.New(fmt.Sprintf("%s/%s.ini", ConfigDir, app.GetName()))
+
+    FileCrashHandler = new(crash.FileHandler)
+    FileCrashHandler.SetCrashDir(CrashDir)
+    crash.AddHandler(FileCrashHandler)
+
+    EmailCrashHandler = crash.NewEmailHandler()
+    crash.AddHandler(EmailCrashHandler)
+
+    catchSigInt()
+    catchCrash()
+    initNet()
+
+    ini.Subscribe(AppConfig, onCfgChange)
+}
+
+// QueryShutdown returns a value
+func QueryShutdown() bool {
+    runLock.Lock()
+    defer runLock.Unlock()
+
+    return shuttingDown
 }
 
 // Run executes the application in whatever run mode is configured.
 func Run() {
+    runLock.Lock()
+    defer runLock.Unlock()
+
     run()
 }
 
@@ -162,26 +198,6 @@ func parseFlags() {
     setRunMode()
 }
 
-// preStart
-func preStart() {
-    catchSigInt()
-
-    AppConfig = ini.New(fmt.Sprintf("%s/%s.ini", ConfigDir, app.GetName()))
-    Log.SetDebugLogsEnabled(false)
-
-    FileCrashHandler = new(crash.FileHandler)
-    FileCrashHandler.SetCrashDir(CrashDir)
-    crash.AddHandler(FileCrashHandler)
-
-    EmailCrashHandler = crash.NewEmailHandler()
-    crash.AddHandler(EmailCrashHandler)
-
-    catchCrash()
-    initNet()
-    
-    ini.Subscribe(AppConfig, onCfgChange)
-}
-
 // setRunMode
 func setRunMode() {
     if modeRunSvc {
@@ -201,8 +217,6 @@ func shutdown() bool {
     notifyShutdown()
 
     Log.Close()
-
-    shuttingDown = true
     
     close(shutdownChan)
     close(crashChan)
@@ -218,6 +232,8 @@ func shutdown() bool {
 
 // signalShutdown
 func signalShutdown() {
+    shuttingDown = true
+
     go func() {
         defer crash.HandleAll()
         shutdownChan<- true
@@ -227,8 +243,6 @@ func signalShutdown() {
 // startSingleton intializes the server process, attempting to make sure
 // that it is the only such process running.
 func startSingleton() bool {
-    preStart()
-
     AppProcess = app.GetRunStatus()
     if AppProcess != nil {
         Log.Error(

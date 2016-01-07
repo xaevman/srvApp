@@ -84,12 +84,22 @@ func (this *appSvc) Execute(
     return
 }
 
+func afterFlags() {
+    switch runMode {
+    case INST_SVC:
+        installSvc()
+    case UNINST_SVC:
+        uninstallSvc()
+    }
+}
+
 func installSvc() {
+    defer signalShutdown()
+    
     Log.Info("Installing service %s", app.GetName())
     scm, err := mgr.Connect()
     if err != nil {
         Log.Error("Error connecting to SCM: %v", err)
-        signalShutdown()
         return
     }
 
@@ -98,7 +108,6 @@ func installSvc() {
     svc, err := scm.OpenService(app.GetName())
     if err == nil {
         Log.Error("Service already exists")
-        signalShutdown()
         return
     }
 
@@ -114,7 +123,6 @@ func installSvc() {
 
     if err != nil {
         Log.Error("Error creating service: %v", err)
-        signalShutdown()
         return
     }
 
@@ -127,10 +135,6 @@ func run() {
         runCmdline()
     case RUN_SVC:
         runSvc()
-    case INST_SVC:
-        installSvc()
-    case UNINST_SVC:
-        uninstallSvc()
     }
 }
 
@@ -151,11 +155,12 @@ func runSvc() {
 }
 
 func uninstallSvc() {
+    defer signalShutdown()
+
     Log.Info("Removing service %s", app.GetName())
     scm, err := mgr.Connect()
     if err != nil {
         Log.Error("Error connecting to SCM: %v", err)
-        signalShutdown()
         return
     }
 
@@ -164,7 +169,6 @@ func uninstallSvc() {
     svc, err := scm.OpenService(app.GetName())
     if err != nil {
         Log.Error("Service %s doesn't exist", app.GetName())
-        signalShutdown()
         return
     }
 
@@ -172,7 +176,6 @@ func uninstallSvc() {
     err = svc.Delete()
     if err != nil {
         Log.Error("Error deleting service: %v", err)
-        signalShutdown()
         return
     }
 

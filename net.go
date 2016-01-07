@@ -15,6 +15,7 @@ package srvApp
 import (
     "github.com/xaevman/crash"
 
+    "bytes"
     "fmt"
     "net"
     "net/http"
@@ -338,6 +339,31 @@ func (this *HttpSrv) RegisterHandler(
     default:
         Log.Error("Unknown handler type (%d)", handlerType)
     }
+}
+
+func ValidateRequestBody(
+    resp   http.ResponseWriter, 
+    req    *http.Request, 
+    buffer *bytes.Buffer,
+) error {
+    if req.ContentLength < 1 {
+        return fmt.Errorf("Zero length body")
+    }
+
+    bodyLen, err := buffer.ReadFrom(req.Body)
+    if err != nil {
+        return err
+    }
+
+    if bodyLen != req.ContentLength {
+        return fmt.Errorf(
+            "Content length mismatch (%d != %d)", 
+            bodyLen, 
+            req.ContentLength,
+        )
+    }
+
+    return nil
 }
 
 func NewHttpSrv() *HttpSrv {
