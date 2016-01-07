@@ -17,7 +17,10 @@ import (
 
     "encoding/json"
     "fmt"
+    "io/ioutil"
+    "mime"
     "net/http"
+    "path/filepath"
     "time"
 )
 
@@ -91,5 +94,23 @@ func OnShutdownUri(resp http.ResponseWriter, req *http.Request) {
 }
 
 func serveStaticFile(resp http.ResponseWriter, req *http.Request, srcDir string) {
+    fName := req.URL.Path
+    if fName == "" || fName == "/" {
+        fName = "index.html"
+    }
 
+    fPath    := filepath.Join(srcDir, fName)
+    mimeType := mime.TypeByExtension(filepath.Ext(fPath))
+
+    data, err := ioutil.ReadFile(fPath)
+    if err != nil {
+        http.Error(
+            resp,
+            fmt.Sprintf("%d : %v", http.StatusNotFound, err),
+            http.StatusNotFound,
+        )
+    }
+
+    resp.Header().Set("Content-Type", mimeType)
+    resp.Write(data)
 }
