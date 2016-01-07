@@ -442,6 +442,7 @@ func initNet() {
     Http.RegisterHandler("/", OnPubStaticSrvUri, PUBLIC_HANDLER)
     Http.RegisterHandler("/cmd/crash/", OnCrashUri, PRIVATE_HANDLER)
     Http.RegisterHandler("/cmd/shutdown/", OnShutdownUri, PRIVATE_HANDLER)
+    Http.RegisterHandler("/debug/counters/", OnCountersUri, PRIVATE_HANDLER)
     Http.RegisterHandler("/debug/netinfo/", OnNetInfoUri, PRIVATE_HANDLER)
     Http.RegisterHandler("/debug/pprof/", http.HandlerFunc(pprof.Index), PRIVATE_HANDLER)
     Http.RegisterHandler("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline), PRIVATE_HANDLER)

@@ -24,6 +24,10 @@ import (
     "time"
 )
 
+func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
+    resp.WriteHeader(http.StatusNotImplemented)
+}
+
 func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
     resp.Write([]byte("Crash initiated\n"))
 
