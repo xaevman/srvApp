@@ -17,11 +17,9 @@ package srvApp
 func afterFlags() {}
 
 func run() {
-    if initComplete {
-        if !startSingleton() {
-            shutdownChan<- true
-        }
-
-        blockUntilShutdown()
+    if !startSingleton() {
+        shutdownChan<- true
     }
+
+    blockUntilShutdown()
 }
