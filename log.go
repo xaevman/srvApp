@@ -63,7 +63,7 @@ func (this *SrvLog) Close() {
 
     for k, _ := range this.subs {
         for i := range this.subs[k] {
-            l, ok := this.subs[k][i].(flog.FLog)
+            l, ok := this.subs[k][i].(log.LogCloser)
             if ok {
                 l.Close()
             }
@@ -138,25 +138,24 @@ func (this *SrvLog) SetLogsEnabled(name string, val bool) {
     logs, ok := this.subs[name]
     if !ok {
         srvLog.Error(
-            "Couldn't change flush interval on %s logs. Loggers missing", 
+            "Couldn't set enabled (%t) on %s logs. Loggers missing", 
+            val,
             name,
         )
         return
     }
 
     for i := range logs {
-        l, ok := logs[i].(flog.FLog)
+        l, ok := logs[i].(log.LogToggler)
         if ok {
-            if val {
-                l.Enable()
-            } else {
-                l.Disable()
-            }
+            l.SetEnabled(val)
         }
     }
 }
 
+// initLogs intializes the log buffer, console, and file-backed logging services
+// for the application.
 func initLogs() {
-    logBuffer = log.NewLogBuffer(100)
-    srvLog = NewSrvLog()
+    logBuffer = log.NewLogBuffer(DefaultHttpLogBuffers)
+    srvLog    = NewSrvLog()
 }

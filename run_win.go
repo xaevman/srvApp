@@ -22,7 +22,12 @@ import (
 
 const accept_cmds = svc.AcceptStop | svc.AcceptShutdown
 
+// appSvc implements the required interfaces to enable the application
+// to run as a windows service and be controlled by the windows service
+// control manager.
 type appSvc struct {}
+
+// Execute is the entry point of execution for a windows service.
 func (this *appSvc) Execute(
     args    []string, 
     r       <-chan svc.ChangeRequest, 
@@ -38,7 +43,7 @@ func (this *appSvc) Execute(
     }
 
     if !startSingleton() {
-        Log.Error("Failed to startSingleton")
+        Log.Error("Failed to start Singleton")
         changes<- svc.Status {
             State : svc.StopPending,
         }
@@ -84,6 +89,8 @@ func (this *appSvc) Execute(
     return
 }
 
+// afterFlags captures the service install and uninstall run modes
+// and executes them, if needed, after command-line flags are parsed.
 func afterFlags() {
     switch runMode {
     case INST_SVC:
@@ -93,6 +100,7 @@ func afterFlags() {
     }
 }
 
+// installSvc attempts to install the running binary as a windows service.
 func installSvc() {
     defer signalShutdown()
     
@@ -129,6 +137,8 @@ func installSvc() {
     Log.Info("Service %s installed", app.GetName())
 }
 
+// run executes the application in either console or service run mode,
+// depending on the arguments supplied on the command line.
 func run() {
     switch runMode {
     case CMDLINE:
@@ -138,6 +148,7 @@ func run() {
     }
 }
 
+// runCmdLine runs the application in console mode.
 func runCmdline() {
     if !startSingleton() {
         signalShutdown()
@@ -146,6 +157,7 @@ func runCmdline() {
     blockUntilShutdown()
 }
 
+// runSvc starts the application in service mode.
 func runSvc() {
     err := svc.Run(app.GetName(), &appSvc{})
     if err != nil {
@@ -154,6 +166,8 @@ func runSvc() {
     }
 }
 
+// uninstallSvc attempts to uninstall the running binary from the service
+// control manager.
 func uninstallSvc() {
     defer signalShutdown()
 

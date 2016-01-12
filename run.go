@@ -14,8 +14,10 @@
 
 package srvApp
 
+// afterFlags is only implemented on the winows platform.
 func afterFlags() {}
 
+// run starts a typical, console-based, application execution.
 func run() {
     if !startSingleton() {
         shutdownChan<- true

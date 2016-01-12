@@ -18,32 +18,44 @@ import (
     "github.com/xaevman/ini"
 )
 
+// onCfgChange is called then the main application config changes. It then
+// passes the config information on to other functions to handle configuration
+// of different parts of the application.
 func onCfgChange(cfg *ini.IniCfg, changeCount int) {
     srvLog.Info("Config change detected (%s) sequence: %d", cfg.Name, changeCount)
-    cfgApp(cfg)
     cfgCrashReports(cfg)
+    cfgLogs(cfg)
     cfgNet(cfg, changeCount)
 }
 
-func cfgApp(cfg *ini.IniCfg) {
-    sec := cfg.GetSection("app")
+// cfgLogs configures logging options when the application config changes.
+func cfgLogs(cfg *ini.IniCfg) {
+    sec  := cfg.GetSection("app")
+    val  := sec.GetFirstVal("HttpLogBuffers")
+    iVal := val.GetValInt(0, DefaultHttpLogBuffers)
+    srvLog.Debug("HttpLogBuffers: %d", iVal)
 
-    val  := sec.GetFirstVal("DebugLogs")
+    logBuffer.SetMaxSize(iVal)
+
+    val   = sec.GetFirstVal("DebugLogs")
     bVal := val.GetValBool(0, false)
     srvLog.Info("Debug logs enabled: %t", bVal)
     srvLog.SetLogsEnabled("debug", bVal)
 
-    val = sec.GetFirstVal("DebugFlushIntervalSec")
-    iVal := int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
-    srvLog.SetFlushIntervalSec("debug", iVal)
-    srvLog.Debug("DebugFlushIntervalSec set (%d)", iVal)
+    val     = sec.GetFirstVal("DebugFlushIntervalSec")
+    i32Val := int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
+    srvLog.SetFlushIntervalSec("debug", i32Val)
+    srvLog.Debug("DebugFlushIntervalSec set (%d)", i32Val)
 
-    val = sec.GetFirstVal("InfoFlushIntervalSec")
-    iVal = int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
-    srvLog.SetFlushIntervalSec("info", iVal)
-    srvLog.Debug("InfoFlushIntervalSec set (%d)", iVal)
+    val    = sec.GetFirstVal("InfoFlushIntervalSec")
+    i32Val = int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
+    srvLog.SetFlushIntervalSec("info", i32Val)
+    srvLog.Debug("InfoFlushIntervalSec set (%d)", i32Val)
+
 }
 
+// cfgCrashReports configures crash reporting options when the application
+// config changes.
 func cfgCrashReports(cfg *ini.IniCfg) {
     sec := cfg.GetSection("crash_reports")
 
@@ -87,6 +99,7 @@ func cfgCrashReports(cfg *ini.IniCfg) {
     }
 }
 
+// cfgNet configures network options when the application config changes.
 func cfgNet(cfg *ini.IniCfg, changeCount int) {
     sec := cfg.GetSection("net")
 

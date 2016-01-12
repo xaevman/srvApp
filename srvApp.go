@@ -177,7 +177,8 @@ func blockUntilShutdown() {
     shutdown()
 }
 
-// catchCrash
+// catchCrash catches the user-initiated crash signal and happily panics
+// the application.
 func catchCrash() {
     go func() {
         defer crash.HandleAll()
@@ -193,7 +194,8 @@ func catchCrash() {
     }()
 }
 
-// catchSigInt 
+// catchSigInt catches the SIGINT signal and, in turn, signals the applciation
+// to start a graceful shutdown.
 func catchSigInt() {
     c := make(chan os.Signal, 1)
     signal.Notify(c, os.Interrupt)
@@ -207,9 +209,10 @@ func catchSigInt() {
     }()
 }
 
-// parseFlags
+// parseFlags registers and parses default command line flags, then
+// sets the default run mode for the application.
 func parseFlags() {
-    // windows-specific options    
+    // windows-specific options
     if runtime.GOOS == "windows" {
         flag.BoolVar(
             &modeRunSvc, 
@@ -238,7 +241,7 @@ func parseFlags() {
     setRunMode()
 }
 
-// setRunMode
+// setRunMode stores the run mode for the application.
 func setRunMode() {
     if modeRunSvc {
         runMode = RUN_SVC
@@ -270,7 +273,7 @@ func shutdown() bool {
     return true
 }
 
-// signalShutdown
+// signalShutdown asynchronously signals the application to shutdown.
 func signalShutdown() {
     shuttingDown = true
 

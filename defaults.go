@@ -13,6 +13,8 @@
 package srvApp
 
 const (
+    DefaultHttpLogBuffers = 100
+
     DefaultPrivateHttpEnabled = true
     DefaultPrivateHttpPort = 8081
     DefaultPrivateStaticDir = ""
