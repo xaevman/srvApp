@@ -21,10 +21,12 @@ import (
     "os/signal"
     "runtime"
     "sync"
-    
+
     "github.com/xaevman/app"
+    "github.com/xaevman/counters"
     "github.com/xaevman/crash"
     "github.com/xaevman/ini"
+    "github.com/xaevman/log"
 )
 
 // RunMode enum
@@ -35,39 +37,74 @@ const (
     UNINST_SVC
 )
 
-// AppConfig represents the application's configuration file.
-var AppConfig *ini.IniCfg
+// AppConfig returns a reference to the application's configuration file.
+func AppConfig() *ini.IniCfg {
+    return appConfig
+}
+var appConfig *ini.IniCfg
 
-// AppProcess is a reference to the current process.
-var AppProcess *os.Process
+// AppCounters returns a reference to the container for this application's
+// performance counters.
+func AppCounters() *counters.List {
+    return appCounters
+}
+var appCounters = counters.NewList()
 
-// CrashDir is the relative path to the application's crash
+// AppProcess returns a reference to the current process.
+func AppProcess() *os.Process {
+    return appProcess
+}
+var appProcess *os.Process
+
+// CrashDir returns the relative path to the application's crash
 // directory.
-var CrashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
+func CrashDir() string {
+    return crashDir
+}
+var crashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
 
-// ConfigDir is the relative path to the application's config
+// ConfigDir returns the relative path to the application's config
 // directory.
-var ConfigDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "config")
+func ConfigDir() string {
+    return configDir
+}
+var configDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "config")
 
-// EmailCrashHandler is one of two default crash handlers for a srvApp.
-// This handler sends crash report emails to configured addresses on
-// application crashes.
-var EmailCrashHandler *crash.EmailHandler
+// EmailCrashHandler returns the email crash handler for the app.
+func EmailCrashHandler() *crash.EmailHandler {
+    return emailCrashHandler
+}
+var emailCrashHandler *crash.EmailHandler
 
-// FileCrashHandler is one of two default crash handlers for a srvApp.
-// This handler writes out a JSON-formatted crash report file on
-// application crashes.
-var FileCrashHandler *crash.FileHandler
+// FileCrashHandler returns the file crash handler for the app.
+func FileCrashHandler() *crash.FileHandler {
+    return fileCrashHandler
+}
+var fileCrashHandler *crash.FileHandler
 
-// Http is the http sever object for the application.
-var Http *HttpSrv = NewHttpSrv()
+// Http returns a refernce to the http sever object for the application.
+func Http() *HttpSrv {
+    return httpSrv
+}
+var httpSrv = NewHttpSrv()
 
-// Log is a helper object which holds 3 separte instances of
-// file-backed log objects; One each for debug, info, and error logs.
-var Log *SrvLog
+// Log returns a refernce to the SrvLog instance for the application.
+func Log() *SrvLog {
+    return srvLog
+}
+var srvLog *SrvLog
 
-// LogDir is the relative path to the application's log directory.
-var LogDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
+// internal log buffer object
+func LogBuffer() *log.LogBuffer {
+    return logBuffer
+}
+var logBuffer *log.LogBuffer
+
+// LogDir returns the relative path to the application's log directory.
+func LogDir() string {
+    return logDir
+}
+var logDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
 
 // Internal vars.
 var (
@@ -81,7 +118,6 @@ var (
     shuttingDown     = false
 )
 
-
 // Init initializes the server appplication. Initializations sets up signal
 // handling, arg parsing, run mode, initializes a default config file, 
 // file and email crash handlers, both private and public facing http server
@@ -91,27 +127,31 @@ func Init() {
     defer runLock.Unlock()
 
     parseFlags()
-    Log = NewSrvLog()
+    initLogs()
 
     afterFlags()
     if shuttingDown {
         return
     }
 
-    AppConfig = ini.New(fmt.Sprintf("%s/%s.ini", ConfigDir, app.GetName()))
+    uptime := counters.NewTimer("app.uptime")
+    uptime.Set(0)
+    appCounters.Add(uptime)
 
-    FileCrashHandler = new(crash.FileHandler)
-    FileCrashHandler.SetCrashDir(CrashDir)
-    crash.AddHandler(FileCrashHandler)
+    appConfig = ini.New(fmt.Sprintf("%s/%s.ini", configDir, app.GetName()))
 
-    EmailCrashHandler = crash.NewEmailHandler()
-    crash.AddHandler(EmailCrashHandler)
+    fileCrashHandler = new(crash.FileHandler)
+    fileCrashHandler.SetCrashDir(crashDir)
+    crash.AddHandler(fileCrashHandler)
+
+    emailCrashHandler = crash.NewEmailHandler()
+    crash.AddHandler(emailCrashHandler)
 
     catchSigInt()
     catchCrash()
     initNet()
 
-    ini.Subscribe(AppConfig, onCfgChange)
+    ini.Subscribe(appConfig, onCfgChange)
 }
 
 // QueryShutdown returns a value
@@ -216,14 +256,14 @@ func setRunMode() {
 func shutdown() bool {
     notifyShutdown()
 
-    Log.Close()
+    srvLog.Close()
     
     close(shutdownChan)
     close(crashChan)
 
     err := app.DeletePidFile()
     if err != nil {
-        Log.Error("%v\n", err)
+        srvLog.Error("%v\n", err)
         return false
     }
     
@@ -243,11 +283,11 @@ func signalShutdown() {
 // startSingleton intializes the server process, attempting to make sure
 // that it is the only such process running.
 func startSingleton() bool {
-    AppProcess = app.GetRunStatus()
-    if AppProcess != nil {
-        Log.Error(
+    appProcess = app.GetRunStatus()
+    if appProcess != nil {
+        srvLog.Error(
             "Application already running under PID %d\n", 
-            AppProcess.Pid,
+            appProcess.Pid,
         )
         return false
     }

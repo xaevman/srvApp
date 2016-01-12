@@ -14,12 +14,12 @@ package srvApp
 
 import (
     "github.com/xaevman/crash"
-    "github.com/xaevman/flog"
+    "github.com/xaevman/log/flog"
     "github.com/xaevman/ini"
 )
 
 func onCfgChange(cfg *ini.IniCfg, changeCount int) {
-    Log.Info("Config change detected (%s) sequence: %d", cfg.Name, changeCount)
+    srvLog.Info("Config change detected (%s) sequence: %d", cfg.Name, changeCount)
     cfgApp(cfg)
     cfgCrashReports(cfg)
     cfgNet(cfg, changeCount)
@@ -30,18 +30,18 @@ func cfgApp(cfg *ini.IniCfg) {
 
     val  := sec.GetFirstVal("DebugLogs")
     bVal := val.GetValBool(0, false)
-    Log.Info("Debug logs enabled: %t", bVal)
-    Log.SetDebugLogsEnabled(bVal)
+    srvLog.Info("Debug logs enabled: %t", bVal)
+    srvLog.SetLogsEnabled("debug", bVal)
 
     val = sec.GetFirstVal("DebugFlushIntervalSec")
     iVal := int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
-    Log.SetDebugFlushIntervalSec(iVal)
-    Log.Debug("DebugFlushIntervalSec set (%d)", iVal)
+    srvLog.SetFlushIntervalSec("debug", iVal)
+    srvLog.Debug("DebugFlushIntervalSec set (%d)", iVal)
 
     val = sec.GetFirstVal("InfoFlushIntervalSec")
     iVal = int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
-    Log.SetInfoFlushIntervalSec(iVal)
-    Log.Debug("InfoFlushIntervalSec set (%d)", iVal)
+    srvLog.SetFlushIntervalSec("info", iVal)
+    srvLog.Debug("InfoFlushIntervalSec set (%d)", iVal)
 }
 
 func cfgCrashReports(cfg *ini.IniCfg) {
@@ -49,38 +49,38 @@ func cfgCrashReports(cfg *ini.IniCfg) {
 
     val  := sec.GetFirstVal("VerboseCrashReports")
     bVal := val.GetValBool(0, DefaultVerboseCrashReports)
-    Log.Debug("VerboseCrashReports set (%t)", bVal)
+    srvLog.Debug("VerboseCrashReports set (%t)", bVal)
     crash.SetVerboseCrashReport(bVal)
 
     val = sec.GetFirstVal("SmtpSrvAddr")
     sVal := val.GetValStr(0, DefaultSmtpSrvAddr)
-    Log.Debug("SmtpSrvAddr set (%s)", sVal)
-    EmailCrashHandler.SrvAddr = sVal
+    srvLog.Debug("SmtpSrvAddr set (%s)", sVal)
+    emailCrashHandler.SrvAddr = sVal
 
     val = sec.GetFirstVal("SmtpSrvPort")
     iVal := val.GetValInt(0, DefaultSmtpSrvPort)
-    Log.Debug("SmtpSrvPort set (%d)", iVal)
-    EmailCrashHandler.SrvPort = iVal
+    srvLog.Debug("SmtpSrvPort set (%d)", iVal)
+    emailCrashHandler.SrvPort = iVal
 
     val = sec.GetFirstVal("SmtpUser")
-    EmailCrashHandler.SrvUser = val.GetValStr(0, "")
+    emailCrashHandler.SrvUser = val.GetValStr(0, "")
 
     val = sec.GetFirstVal("SmtpPass")
-    EmailCrashHandler.SrvPass = val.GetValStr(0, "")
+    emailCrashHandler.SrvPass = val.GetValStr(0, "")
 
     val = sec.GetFirstVal("SmtpFromAddr")
     sVal = val.GetValStr(0, DefaultSmtpFromAddr)
-    Log.Debug("SmtpFromAddr set (%s)", sVal)
-    EmailCrashHandler.FromAddr = sVal
+    srvLog.Debug("SmtpFromAddr set (%s)", sVal)
+    emailCrashHandler.FromAddr = sVal
 
     vals := sec.GetVals("SmtpToAddr")
-    EmailCrashHandler.ClearToAddrs()
+    emailCrashHandler.ClearToAddrs()
     for i := range vals {
         sVal = vals[i].GetValStr(0, "")
         if sVal != "" {
-            Log.Debug("Added ToAddr: %s", sVal)
-            EmailCrashHandler.ToAddrs = append(
-                EmailCrashHandler.ToAddrs, 
+            srvLog.Debug("Added ToAddr: %s", sVal)
+            emailCrashHandler.ToAddrs = append(
+                emailCrashHandler.ToAddrs, 
                 sVal,
             )
         }
@@ -92,34 +92,34 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 
     val            := sec.GetFirstVal("PrivateHttpEnabled")
     privateEnabled := val.GetValBool(0, DefaultPrivateHttpEnabled)
-    Log.Debug("PrivateHttpEnabled: %t", privateEnabled)
+    srvLog.Debug("PrivateHttpEnabled: %t", privateEnabled)
 
     val        = sec.GetFirstVal("PrivateHttpPort")
     privatePort := val.GetValInt(0, DefaultPrivateHttpPort)
-    Log.Debug("PrivateHttpPort: %d", privatePort)
+    srvLog.Debug("PrivateHttpPort: %d", privatePort)
 
     val               = sec.GetFirstVal("PrivateStaticDir")
     privateStaticDir := val.GetValStr(0, DefaultPrivateStaticDir)
-    Log.Debug("PrivateStaticDir: %s", privateStaticDir)
+    srvLog.Debug("PrivateStaticDir: %s", privateStaticDir)
 
     val  = sec.GetFirstVal("PublicHttpEnabled")
     publicEnabled := val.GetValBool(0, DefaultPublicHttpEnabled)
-    Log.Debug("PublicHttpEnabled: %t", publicEnabled)
+    srvLog.Debug("PublicHttpEnabled: %t", publicEnabled)
 
     val        = sec.GetFirstVal("PublicHttpPort")
     publicPort := val.GetValInt(0, DefaultPublicHttpPort)
-    Log.Debug("PublicHttpPort: %d", publicPort)
+    srvLog.Debug("PublicHttpPort: %d", publicPort)
 
     val              = sec.GetFirstVal("PublicStaticDir")
     publicStaticDir := val.GetValStr(0, DefaultPublicStaticDir)
-    Log.Debug("PUblicStaticDir: %s", publicStaticDir)
+    srvLog.Debug("PUblicStaticDir: %s", publicStaticDir)
 
     // force "restart" on first config parse. This ensures that
     // that the http listeners are intialized if a user starts the
     // server with all default vaules.
     forceRestart := (changeCount == 0)
 
-    Http.Configure(
+    httpSrv.Configure(
         privateEnabled, 
         privatePort, 
         privateStaticDir,

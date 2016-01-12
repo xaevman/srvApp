@@ -13,6 +13,7 @@
 package srvApp
 
 import (
+    "github.com/jeffail/gabs"
     "github.com/xaevman/crash"
 
     "encoding/json"
@@ -24,25 +25,8 @@ import (
     "time"
 )
 
-func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
-    resp.WriteHeader(http.StatusNotImplemented)
-}
-
-func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
-    resp.Write([]byte("Crash initiated\n"))
-
-    Log.Info("Crash initiated via http request")
-
-    go func() {
-        defer crash.HandleAll()
-
-        <-time.After(2 * time.Second)
-        crashChan<- true
-    }()
-}
-
-func OnNetInfoUri(resp http.ResponseWriter, req *http.Request) {
-    handlers  := Http.getNetInfo()
+func OnAppInfoUri(resp http.ResponseWriter, req *http.Request) {
+    handlers  := httpSrv.getNetInfo()
     data, err := json.MarshalIndent(&handlers, "", "    ")
     if err != nil {
         http.Error(
@@ -56,8 +40,37 @@ func OnNetInfoUri(resp http.ResponseWriter, req *http.Request) {
     resp.Write(data)
 }
 
+func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
+    
+}
+
+func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
+    resp.Write([]byte("Crash initiated\n"))
+
+    srvLog.Info("Crash initiated via http request")
+
+    go func() {
+        defer crash.HandleAll()
+
+        <-time.After(2 * time.Second)
+        crashChan<- true
+    }()
+}
+
+func OnLogsUri(resp http.ResponseWriter, req *http.Request) {
+    logs := LogBuffer().ReadAll()
+    json := gabs.New()
+    json.Array("logs")
+
+    for i := range logs {
+        json.ArrayAppend(logs[i], "logs")
+    }
+
+    resp.Write(json.Bytes())
+}
+
 func OnPrivStaticSrvUri(resp http.ResponseWriter, req *http.Request) {
-    srcDir := Http.privStaticDir()
+    srcDir := httpSrv.privStaticDir()
     if srcDir == "" {
         http.Error(
             resp, 
@@ -71,7 +84,7 @@ func OnPrivStaticSrvUri(resp http.ResponseWriter, req *http.Request) {
 }
 
 func OnPubStaticSrvUri(resp http.ResponseWriter, req *http.Request) {
-    srcDir := Http.pubStaticDir()
+    srcDir := httpSrv.pubStaticDir()
     if srcDir == "" {
         http.Error(
             resp, 
@@ -87,7 +100,7 @@ func OnPubStaticSrvUri(resp http.ResponseWriter, req *http.Request) {
 func OnShutdownUri(resp http.ResponseWriter, req *http.Request) {
     resp.Write([]byte("Shutdown initiated\n"))
 
-    Log.Info("Shutdown initiated via http request")
+    srvLog.Info("Shutdown initiated via http request")
 
     go func() {
         defer crash.HandleAll()

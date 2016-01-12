@@ -13,84 +13,150 @@
 package srvApp
 
 import (
-    "github.com/xaevman/flog"
+    "github.com/xaevman/log"
+    "github.com/xaevman/log/flog"
+
+    "sync"
 )
 
 // SrvLog contains helper functions which distribute log messages
 // between separate debug, info, and error log objects.
 type SrvLog struct {
-    dLog flog.FLog
-    eLog flog.FLog
-    iLog flog.FLog
+    lock sync.RWMutex
+    subs map[string][]log.LogNotify
 }
 
 // NewSrvLog returns a new instance of a SrvLog object.
 func NewSrvLog() *SrvLog {
-    flog.FlogCallDepth = 4
-    
     obj := &SrvLog {
-        dLog : flog.New("debug", LogDir, flog.BufferedFile),
-        eLog : flog.New("error", LogDir, flog.DirectFile),
-        iLog : flog.New("info",  LogDir, flog.BufferedFile),
+        subs : make(map[string][]log.LogNotify),
     }
-    
+
+    obj.AddLog("debug", logBuffer)
+    obj.AddLog("error", logBuffer)
+    obj.AddLog("info",  logBuffer)
+
+    obj.AddLog("debug", flog.New("debug", logDir, flog.BufferedFile))
+    obj.AddLog("error", flog.New("error", logDir, flog.DirectFile))
+    obj.AddLog("info",  flog.New("info",  logDir, flog.BufferedFile))
+
     return obj
 }
 
+// AddLog
+func (this *SrvLog) AddLog(name string, newLog log.LogNotify) {
+    this.lock.Lock()
+    defer this.lock.Unlock()
+
+    _, ok := this.subs[name]
+    if !ok {
+        this.subs[name] = make([]log.LogNotify, 0, 1)
+    }
+
+    this.subs[name] = append(this.subs[name], newLog)
+}
+
 // Close closes the debug, err, and info flog instances.
-func (sl *SrvLog) Close() {
-    sl.dLog.Close()
-    sl.eLog.Close()
-    sl.iLog.Close()
+func (this *SrvLog) Close() {
+    this.lock.RLock()
+    defer this.lock.RUnlock()
+
+    for k, _ := range this.subs {
+        for i := range this.subs[k] {
+            l, ok := this.subs[k][i].(flog.FLog)
+            if ok {
+                l.Close()
+            }
+        }
+    }
 }
 
 // Debug is a proxy which passes its arguments along to the underlying
 // debug flog instance.
-func (sl *SrvLog) Debug(format string, v ...interface{}) {
-    if v == nil {
-        sl.dLog.Print(format)
-    } else {
-        sl.dLog.Print(format, v...)
-    }
+func (this *SrvLog) Debug(format string, v ...interface{}) {
+    this.LogTo("debug", format, v...)
 }
 
 // Error is a proxy which passes its arguments along to the underlying
 // error flog instance.
-func (sl *SrvLog) Error(format string, v ...interface{}) {
-    if v == nil {
-        sl.eLog.Print(format)
-    } else {
-        sl.eLog.Print(format, v...)
-    }
+func (this *SrvLog) Error(format string, v ...interface{}) {
+    this.LogTo("error", format, v...)
 }
 
 // Info is a proxy which passes its arguments along to the underlying
 // info flog instance.
-func (sl *SrvLog) Info(format string, v ...interface{}) {
-    if v == nil {
-        sl.iLog.Print(format)
-    } else {
-        sl.iLog.Print(format, v...)
+func (this *SrvLog) Info(format string, v ...interface{}) {
+    this.LogTo("info", format, v...)
+}
+
+// LogTo logs to the registered loggers with the specified key, using
+// the supplied formatting string and arguments.
+func (this *SrvLog) LogTo(name, format string, v ...interface{}) {
+    msg := log.FormatLogMsg(name, format, 3, v...)
+
+    this.lock.RLock()
+    defer this.lock.RUnlock()
+
+    logs, ok := this.subs[name]
+    if !ok {
+        srvLog.Error("Couldn't log to %s logs. Loggers missing.", name)
+        return
+    }
+
+    for i := range logs {
+        logs[i].Print(msg)
     }
 }
 
 // SetDebugFlushIntervalSec sets the flush interval for the debug log.
-func (sl *SrvLog) SetDebugFlushIntervalSec(interval int32) {
-    dbgLog := sl.dLog.(*flog.BufferedLog)
-    dbgLog.SetFlushIntervalSec(interval)
-}
+func (this *SrvLog) SetFlushIntervalSec(name string, interval int32) {
+    this.lock.RLock()
+    defer this.lock.RUnlock()
 
-// SetDebugLogs enables or disables debug logging.
-func (sl *SrvLog) SetDebugLogsEnabled(val bool) {
-    if val {
-        sl.dLog.Enable()
-    } else {
-        sl.dLog.Disable()
+    logs, ok := this.subs[name]
+    if !ok {
+        srvLog.Error(
+            "Couldn't change flush interval on %s logs. Loggers missing", 
+            name,
+        )
+        return
+    }
+    
+    for i := range logs {
+        dbgLog, ok := logs[i].(*flog.BufferedLog)
+        if ok {
+            dbgLog.SetFlushIntervalSec(interval)
+        }
     }
 }
 
-// SetInfoFlushIntervalSec sets the flush interval for the info log.
-func (sl *SrvLog) SetInfoFlushIntervalSec(interval int32) {
-    infoLog := sl.iLog.(*flog.BufferedLog)
-    infoLog.SetFlushIntervalSec(interval)
+// SetDebugLogs enables or disables debug logging.
+func (this *SrvLog) SetLogsEnabled(name string, val bool) {
+    this.lock.RLock()
+    defer this.lock.RUnlock()
+    
+    logs, ok := this.subs[name]
+    if !ok {
+        srvLog.Error(
+            "Couldn't change flush interval on %s logs. Loggers missing", 
+            name,
+        )
+        return
+    }
+
+    for i := range logs {
+        l, ok := logs[i].(flog.FLog)
+        if ok {
+            if val {
+                l.Enable()
+            } else {
+                l.Disable()
+            }
+        }
+    }
+}
+
+func initLogs() {
+    logBuffer = log.NewLogBuffer(100)
+    srvLog = NewSrvLog()
 }
