@@ -126,6 +126,8 @@ func Init() {
     runLock.Lock()
     defer runLock.Unlock()
 
+    os.Chdir(app.GetExeDir())
+
     parseFlags()
     initLogs()
 
@@ -134,7 +136,7 @@ func Init() {
         return
     }
 
-    uptime := counters.NewTimer("app.uptime")
+    uptime := counters.NewTimer("app.uptime_sec")
     uptime.Set(0)
     appCounters.Add(uptime)
 

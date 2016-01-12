@@ -20,6 +20,7 @@ import (
     "fmt"
     "io/ioutil"
     "mime"
+    "os"
     "net/http"
     "path/filepath"
     "time"
@@ -162,20 +163,58 @@ func OnShutdownUri(resp http.ResponseWriter, req *http.Request) {
 // to serve static files from a given local directory on disk.
 func serveStaticFile(resp http.ResponseWriter, req *http.Request, srcDir string) {
     fName := req.URL.Path
-    if fName == "" || fName == "/" {
-        fName = "index.html"
+    if fName == "" || fName[len(fName) - 1] == '/' {
+        fName += "index.html"
     }
 
-    fPath    := filepath.Join(srcDir, fName)
-    mimeType := mime.TypeByExtension(filepath.Ext(fPath))
-
-    data, err := ioutil.ReadFile(fPath)
+    fPath        := filepath.Join(srcDir, fName)
+    absPath, err := filepath.Abs(fPath)
     if err != nil {
         http.Error(
             resp,
             fmt.Sprintf("%d : %v", http.StatusNotFound, err),
             http.StatusNotFound,
         )
+        return
+    }
+
+    pInfo, err := os.Stat(absPath)
+    if os.IsNotExist(err) {
+        srvLog.Debug("Can't retrieve file %s", absPath)
+        http.Error(
+            resp,
+            fmt.Sprintf("%d : File not found (%s)", http.StatusNotFound, fPath),
+            http.StatusNotFound,
+        )
+        return
+    } else if err != nil {
+        http.Error(
+            resp,
+            fmt.Sprintf("%d : %v", http.StatusNotFound, err),
+            http.StatusNotFound,
+        )
+        return
+    }
+
+    if pInfo.IsDir() {
+        http.Error(
+            resp,
+            fmt.Sprintf("%d : File not found (%s)", http.StatusNotFound, fPath),
+            http.StatusNotFound,
+        )
+        return
+    }
+
+    mimeType := mime.TypeByExtension(filepath.Ext(absPath))
+
+    data, err := ioutil.ReadFile(absPath)
+    if err != nil {
+        http.Error(
+            resp,
+            fmt.Sprintf("%d : %v", http.StatusNotFound, err),
+            http.StatusNotFound,
+        )
+        return
     }
 
     resp.Header().Set("Content-Type", mimeType)
