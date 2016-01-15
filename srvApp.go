@@ -39,6 +39,9 @@ const (
 
 // AppConfig returns a reference to the application's configuration file.
 func AppConfig() *ini.IniCfg {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return appConfig
 }
 var appConfig *ini.IniCfg
@@ -46,12 +49,18 @@ var appConfig *ini.IniCfg
 // AppCounters returns a reference to the container for this application's
 // performance counters.
 func AppCounters() *counters.List {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return appCounters
 }
 var appCounters = counters.NewList()
 
 // AppProcess returns a reference to the current process.
 func AppProcess() *os.Process {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return appProcess
 }
 var appProcess *os.Process
@@ -59,6 +68,9 @@ var appProcess *os.Process
 // CrashDir returns the relative path to the application's crash
 // directory.
 func CrashDir() string {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return crashDir
 }
 var crashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
@@ -66,42 +78,63 @@ var crashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
 // ConfigDir returns the relative path to the application's config
 // directory.
 func ConfigDir() string {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return configDir
 }
 var configDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "config")
 
 // EmailCrashHandler returns the email crash handler for the app.
 func EmailCrashHandler() *crash.EmailHandler {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return emailCrashHandler
 }
 var emailCrashHandler *crash.EmailHandler
 
 // FileCrashHandler returns the file crash handler for the app.
 func FileCrashHandler() *crash.FileHandler {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return fileCrashHandler
 }
 var fileCrashHandler *crash.FileHandler
 
 // Http returns a refernce to the http sever object for the application.
 func Http() *HttpSrv {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return httpSrv
 }
 var httpSrv = NewHttpSrv()
 
 // Log returns a refernce to the SrvLog instance for the application.
 func Log() *SrvLog {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return srvLog
 }
 var srvLog *SrvLog
 
 // internal log buffer object
 func LogBuffer() *log.LogBuffer {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+    
     return logBuffer
 }
 var logBuffer *log.LogBuffer
 
 // LogDir returns the relative path to the application's log directory.
 func LogDir() string {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+
     return logDir
 }
 var logDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
@@ -112,6 +145,7 @@ var (
     modeInstallSvc   = false
     modeRunSvc       = false
     modeUninstallSvc = false
+    cfgLock            sync.RWMutex
     runLock            sync.Mutex
     runMode            byte
     shutdownChan     = make(chan bool, 0)
@@ -125,6 +159,9 @@ var (
 func Init() {
     runLock.Lock()
     defer runLock.Unlock()
+
+    cfgLock.Lock()
+    defer cfgLock.Unlock()
 
     os.Chdir(app.GetExeDir())
 
@@ -158,8 +195,8 @@ func Init() {
 
 // QueryShutdown returns a value
 func QueryShutdown() bool {
-    runLock.Lock()
-    defer runLock.Unlock()
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
 
     return shuttingDown
 }
@@ -261,14 +298,14 @@ func setRunMode() {
 func shutdown() bool {
     notifyShutdown()
 
-    srvLog.Close()
+    Log().Close()
     
     close(shutdownChan)
     close(crashChan)
 
     err := app.DeletePidFile()
     if err != nil {
-        srvLog.Error("%v\n", err)
+        Log().Error("%v\n", err)
         return false
     }
     
@@ -277,6 +314,9 @@ func shutdown() bool {
 
 // signalShutdown asynchronously signals the application to shutdown.
 func signalShutdown() {
+    cfgLock.Lock()
+    defer cfgLock.Unlock()
+
     shuttingDown = true
 
     go func() {
@@ -288,7 +328,10 @@ func signalShutdown() {
 // startSingleton intializes the server process, attempting to make sure
 // that it is the only such process running.
 func startSingleton() bool {
+    cfgLock.Lock()
     appProcess = app.GetRunStatus()
+    cfgLock.Unlock()
+
     if appProcess != nil {
         srvLog.Error(
             "Application already running under PID %d\n", 
