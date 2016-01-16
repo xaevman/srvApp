@@ -408,9 +408,9 @@ func initNet() {
 
     localAddrs = make([]*net.IP, 0)
     for i := range addrs {
-        ip, _, err := net.ParseCIDR(addrs[i].String())
-        if err != nil {
-            panic(err)
+        ip := net.ParseIP(addrs[i].String())
+        if ip == nil {
+            continue
         }
 
         if ip.To4() == nil {
@@ -456,5 +456,5 @@ func initNet() {
     httpSrv.RegisterHandler("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline), PRIVATE_HANDLER)
     httpSrv.RegisterHandler("/debug/pprof/profile", http.HandlerFunc(pprof.Profile), PRIVATE_HANDLER)
     httpSrv.RegisterHandler("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol), PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/pprof/trace", http.HandlerFunc(pprof.Trace), PRIVATE_HANDLER)
+    //httpSrv.RegisterHandler("/debug/pprof/trace", http.HandlerFunc(pprof.Trace), PRIVATE_HANDLER)
 }
