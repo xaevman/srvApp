@@ -21,6 +21,7 @@ import (
     "net/http"
     "net/http/pprof"
     "sort"
+    "strings"
     "sync"
     "sync/atomic"
 )
@@ -405,10 +406,11 @@ func initNet() {
     if err != nil {
         panic(err)
     }
-
+    
     localAddrs = make([]*net.IP, 0)
     for i := range addrs {
-        ip := net.ParseIP(addrs[i].String())
+        addrParts := strings.Split(addrs[i].String(), "/")        
+        ip := net.ParseIP(addrParts[0])
         if ip == nil {
             continue
         }
