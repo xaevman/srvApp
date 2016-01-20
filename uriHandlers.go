@@ -16,9 +16,10 @@ import (
     "github.com/xaevman/counters"
     "github.com/xaevman/crash"
 
+    "bufio"
     "encoding/json"
     "fmt"
-    "io/ioutil"
+    "io"
     "mime"
     "os"
     "net/http"
@@ -207,7 +208,7 @@ func serveStaticFile(resp http.ResponseWriter, req *http.Request, srcDir string)
 
     mimeType := mime.TypeByExtension(filepath.Ext(absPath))
 
-    data, err := ioutil.ReadFile(absPath)
+    f, err := os.Open(absPath)
     if err != nil {
         http.Error(
             resp,
@@ -218,5 +219,8 @@ func serveStaticFile(resp http.ResponseWriter, req *http.Request, srcDir string)
     }
 
     resp.Header().Set("Content-Type", mimeType)
-    resp.Write(data)
+    
+    w := bufio.NewWriterSize(resp, 64 * 1024)
+    io.Copy(w, f)
+    w.Flush()
 }
