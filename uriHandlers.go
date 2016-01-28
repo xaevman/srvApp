@@ -13,7 +13,6 @@
 package srvApp
 
 import (
-    "github.com/xaevman/counters"
     "github.com/xaevman/crash"
 
     "bufio"
@@ -32,6 +31,7 @@ func OnAppInfoUri(resp http.ResponseWriter, req *http.Request) {
     handlers  := httpSrv.getNetInfo()
     data, err := json.MarshalIndent(&handlers, "", "    ")
     if err != nil {
+        srvLog.Error("OnAppInfoUri :: %v", err)
         http.Error(
             resp, 
             fmt.Sprintf("%d : Internal Error", http.StatusInternalServerError),
@@ -45,15 +45,9 @@ func OnAppInfoUri(resp http.ResponseWriter, req *http.Request) {
 
 // OnCountersUri handles requests to the /debug/counters/ uri.
 func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
-    cList := make(map[string]interface{})
-
-    AppCounters().Do(func(c counters.Counter) error {
-        cList[c.Name()] = c.GetRaw()
-        return nil
-    })
-
-    data, err := json.MarshalIndent(&cList, "", "    ")
+    data, err := json.MarshalIndent(AppCounters(), "", "    ")
     if err != nil {
+        srvLog.Error("OnAppInfoUri :: %v", err)
         http.Error(
             resp,
             fmt.Sprintf("%d : Internal Error", http.StatusInternalServerError),
@@ -90,10 +84,9 @@ func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
 
 // OnLogsUri handles requests to the /debug/logs/ uri.
 func OnLogsUri(resp http.ResponseWriter, req *http.Request) {
-    logs := LogBuffer().ReadAll()
-
-    data, err := json.MarshalIndent(&logs, "", "    ")
+    data, err := json.MarshalIndent(logBuffer, "", "    ")
     if err != nil {
+        srvLog.Error("OnLogsUri :: %v", err)
         http.Error(
             resp, 
             fmt.Sprintf("%d : Internal Error", http.StatusInternalServerError),
