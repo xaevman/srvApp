@@ -92,7 +92,7 @@ func (this *SrvLog) Info(format string, v ...interface{}) {
 // LogTo logs to the registered loggers with the specified key, using
 // the supplied formatting string and arguments.
 func (this *SrvLog) LogTo(name, format string, v ...interface{}) {
-    msg := log.FormatLogMsg(name, format, 3, v...)
+    msg := log.NewLogMsg(name, format, 3, v...)
 
     this.lock.RLock()
     defer this.lock.RUnlock()
