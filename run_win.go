@@ -102,12 +102,12 @@ func afterFlags() {
 
 // installSvc attempts to install the running binary as a windows service.
 func installSvc() {
-    defer signalShutdown()
+    defer _signalShutdown()
     
-    Log().Info("Installing service %s", app.GetName())
+    srvLog.Info("Installing service %s", app.GetName())
     scm, err := mgr.Connect()
     if err != nil {
-        Log().Error("Error connecting to SCM: %v", err)
+        srvLog.Error("Error connecting to SCM: %v", err)
         return
     }
 
@@ -115,7 +115,7 @@ func installSvc() {
 
     svc, err := scm.OpenService(app.GetName())
     if err == nil {
-        Log().Error("Service already exists")
+        srvLog.Error("Service already exists")
         return
     }
 
@@ -130,11 +130,11 @@ func installSvc() {
     defer svc.Close()
 
     if err != nil {
-        Log().Error("Error creating service: %v", err)
+        srvLog.Error("Error creating service: %v", err)
         return
     }
 
-    Log().Info("Service %s installed", app.GetName())
+    srvLog.Info("Service %s installed", app.GetName())
 }
 
 // run executes the application in either console or service run mode,
@@ -161,7 +161,7 @@ func runCmdline() {
 func runSvc() {
     err := svc.Run(app.GetName(), &appSvc{})
     if err != nil {
-        Log().Error("Service execution error: %v", err)
+        srvLog.Error("Service execution error: %v", err)
         signalShutdown()
     }
 }
@@ -169,12 +169,12 @@ func runSvc() {
 // uninstallSvc attempts to uninstall the running binary from the service
 // control manager.
 func uninstallSvc() {
-    defer signalShutdown()
+    defer _signalShutdown()
 
-    Log().Info("Removing service %s", app.GetName())
+    srvLog.Info("Removing service %s", app.GetName())
     scm, err := mgr.Connect()
     if err != nil {
-        Log().Error("Error connecting to SCM: %v", err)
+        srvLog.Error("Error connecting to SCM: %v", err)
         return
     }
 
@@ -182,16 +182,16 @@ func uninstallSvc() {
 
     svc, err := scm.OpenService(app.GetName())
     if err != nil {
-        Log().Error("Service %s doesn't exist", app.GetName())
+        srvLog.Error("Service %s doesn't exist", app.GetName())
         return
     }
 
     defer svc.Close()
     err = svc.Delete()
     if err != nil {
-        Log().Error("Error deleting service: %v", err)
+        srvLog.Error("Error deleting service: %v", err)
         return
     }
 
-    Log().Info("Service %s deleted", app.GetName())
+    srvLog.Info("Service %s deleted", app.GetName())
 }

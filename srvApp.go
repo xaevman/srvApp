@@ -312,11 +312,17 @@ func shutdown() bool {
     return true
 }
 
-// signalShutdown asynchronously signals the application to shutdown.
+// signalShutdown ensures a config lock before calling
+// the unsafe _signalShutdown
 func signalShutdown() {
     cfgLock.Lock()
     defer cfgLock.Unlock()
 
+    _signalShutdown();
+}
+
+// _signalShutdown asynchronously signals the application to shutdown.
+func _signalShutdown() {
     shuttingDown = true
 
     go func() {
