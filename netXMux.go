@@ -1,19 +1,33 @@
 package srvApp
 
 import (
+    "fmt"
     "net"
     "net/http"
     "net/url"
     "path"
     "strings"
     "sync"
+    "sync/atomic"
+
+    "github.com/xaevman/counters"
 )
 
+var muxId uint64
 
 type XMux struct {
+    id    uint64
     mu    sync.RWMutex
     m     map[string]muxEntry
     hosts bool // whether any patterns contain hostnames
+
+    // counters
+    cntParseFailed  counters.Counter
+    cntNotFound     counters.Counter
+    cntGeoDeny      counters.Counter
+    cntIPDeny       counters.Counter
+    cntThrottleDeny counters.Counter
+    cntSuccess      counters.Counter
 }
 
 type muxEntry struct {
@@ -23,7 +37,28 @@ type muxEntry struct {
 }
 
 // NewServeMux allocates and returns a new XMux.
-func NewXMux() *XMux { return &XMux{m: make(map[string]muxEntry)} }
+func NewXMux() *XMux { 
+    newId  := atomic.AddUint64(&muxId, 1)
+    newMux := &XMux{
+        id              : newId,
+        m               : make(map[string]muxEntry),
+        cntParseFailed  : counters.NewUint(fmt.Sprintf("net.xmux.%d.parse_failed", newId)),
+        cntNotFound     : counters.NewUint(fmt.Sprintf("net.xmux.%d.handler_not_found", newId)),
+        cntGeoDeny      : counters.NewUint(fmt.Sprintf("net.xmux.%d.geo_deny", newId)),
+        cntIPDeny       : counters.NewUint(fmt.Sprintf("net.xmux.%d.ip_deny", newId)),
+        cntThrottleDeny : counters.NewUint(fmt.Sprintf("net.xmux.%d.throttle_deny", newId)),
+        cntSuccess      : counters.NewUint(fmt.Sprintf("net.xmux.%d.success", newId)),
+    }
+
+    appCounters.Add(newMux.cntParseFailed)
+    appCounters.Add(newMux.cntNotFound)
+    appCounters.Add(newMux.cntGeoDeny)
+    appCounters.Add(newMux.cntIPDeny)
+    appCounters.Add(newMux.cntThrottleDeny)
+    appCounters.Add(newMux.cntSuccess)
+
+    return newMux
+}
 
 // Does path match pattern?
 func pathMatch(pattern, path string) bool {
@@ -135,6 +170,7 @@ func (mux *XMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     if err != nil {
         srvLog.Error("Unable to parse remote host address (%s)", r.RemoteAddr)
         http.Error(w, "StatusInternalServerError", http.StatusInternalServerError)
+        mux.cntParseFailed.Add(uint64(1))
         return
     }
 
@@ -142,6 +178,7 @@ func (mux *XMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
     if h == nil {
         http.NotFoundHandler().ServeHTTP(w, r)
         ipsLogStats(host, r.URL.Path, pattern, ACCESS_LEVEL_NONE, REQ_STATUS_NOT_FOUND)
+        mux.cntNotFound.Add(uint64(1))
         return
     }
 
@@ -157,6 +194,7 @@ func (mux *XMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         )
         http.Error(w, "StatusUnauthorized", http.StatusUnauthorized)
         ipsLogStats(host, r.URL.Path, pattern, accessLevel, REQ_STATUS_IP_DENY)
+        mux.cntIPDeny.Add(uint64(1))
         return
     }
 
@@ -171,12 +209,14 @@ func (mux *XMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
         )
         http.Error(w, "StatusUnauthorized", http.StatusUnauthorized)
         ipsLogStats(host, r.URL.Path, pattern, accessLevel, REQ_STATUS_GEO_DENY)
+        mux.cntGeoDeny.Add(uint64(1))
         return
     }
 
     // everything is good. handle the request
     h.Handler.ServeHTTP(w, r)
     ipsLogStats(host, r.URL.Path, pattern, accessLevel, REQ_STATUS_SUCCESS)
+    mux.cntSuccess.Add(uint64(1))
 }
 
 // Handle registers the handler for the given pattern.

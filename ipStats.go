@@ -123,7 +123,7 @@ func ipsGetMaxReqAgeHrs() float64 {
 
 func ipsOnUri(resp http.ResponseWriter, req *http.Request) {
     defer crash.HandleAll()
-    
+
     ipsLock.RLock()
     defer ipsLock.RUnlock()
 
@@ -143,6 +143,7 @@ func ipsPurgeOldStats() {
     defer ipsLock.Unlock()
 
     maxReqAgeHrs := ipsGetMaxReqAgeHrs()
+    purgeCount   := 0
 
     for k, _ := range ipsStats {
         ipsStats[k].StatLock.Lock()
@@ -152,9 +153,12 @@ func ipsPurgeOldStats() {
             dt := time.Since(ipsStats[k].Requests[i].Timestamp)
             if dt.Hours() > maxReqAgeHrs {
                 ipsStats[k].deleteReqAtIndex(i)
+                purgeCount++
             }
         }
     }
+
+    srvLog.Info("Purged %d old IPStat entries", purgeCount)
 }
 
 func ipsLogStats(host string, uri, pattern string, access, status int) {
