@@ -14,7 +14,6 @@ package srvApp
 
 import (
     "net"
-    "strings"
     
     "github.com/xaevman/crash"
     "github.com/xaevman/log/flog"
@@ -117,8 +116,9 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
     privatePort := val.GetValInt(0, DefaultPrivateHttpPort)
     srvLog.Debug("PrivateHttpPort: %d", privatePort)
 
-    val               = sec.GetFirstVal("PrivateStaticDir")
+    val = sec.GetFirstVal("PrivateStaticDir")
     privateStaticDir := val.GetValStr(0, DefaultPrivateStaticDir)
+    privateStaticAccessLevel := parseAccessLevel(val.GetValStr(1, DefaultPrivateStaticAccessLevel))
     srvLog.Debug("PrivateStaticDir: %s", privateStaticDir)
 
     val  = sec.GetFirstVal("PublicHttpEnabled")
@@ -129,12 +129,13 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
     publicPort := val.GetValInt(0, DefaultPublicHttpPort)
     srvLog.Debug("PublicHttpPort: %d", publicPort)
 
-    val              = sec.GetFirstVal("PublicStaticDir")
+    val = sec.GetFirstVal("PublicStaticDir")
     publicStaticDir := val.GetValStr(0, DefaultPublicStaticDir)
+    publicStaticAccessLevel := parseAccessLevel(val.GetValStr(1, DefaultPublicStaticAccessLevel))
     srvLog.Debug("PUblicStaticDir: %s", publicStaticDir)
 
-    netAccessList =  make([]*AccessNet, 0)
-    vals  := sec.GetVals("AccessRights")
+    netAccessList = make([]*AccessNet, 0)
+    vals := sec.GetVals("AccessRights")
     for i := range vals {
         ip, ipNet, err := net.ParseCIDR(vals[i].GetValStr(0, ""))
         if err != nil {
@@ -142,20 +143,7 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
             continue
         }
 
-        level  := ACCESS_LEVEL_NONE
-        lvlStr := strings.ToLower(vals[i].GetValStr(1, "None"))
-
-        switch (lvlStr) {
-        case "admin":
-            level = ACCESS_LEVEL_ADMIN
-        case "user":
-            level = ACCESS_LEVEL_USER
-        case "none":
-            level = ACCESS_LEVEL_NONE
-        default:
-            level = ACCESS_LEVEL_NONE
-        }
-
+        level  :=  parseAccessLevel(vals[i].GetValStr(1, "none"))
         newNet := true
         for i := range netAccessList {
             if netAccessList[i].Subnet.Contains(ip) {
@@ -193,9 +181,11 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
         privateEnabled, 
         privatePort, 
         privateStaticDir,
+        privateStaticAccessLevel,
         publicEnabled, 
         publicPort, 
         publicStaticDir,
+        publicStaticAccessLevel,
         forceRestart,
     )
 }

@@ -18,9 +18,11 @@ const (
     DefaultPrivateHttpEnabled = true
     DefaultPrivateHttpPort = 8081
     DefaultPrivateStaticDir = ""
+    DefaultPrivateStaticAccessLevel = "admin"
     DefaultPublicHttpEnabled = false
     DefaultPublicHttpPort = 8080
     DefaultPublicStaticDir = ""
+    DefaultPublicStaticAccessLevel = "admin"
 
     DefaultSmtpFromAddr = ""
     DefaultSmtpSrvAddr = "smtp"

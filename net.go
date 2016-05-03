@@ -33,39 +33,10 @@ const (
     ALL_HANDLER
 )
 
-const (
-    ACCESS_LEVEL_NONE = iota
-    ACCESS_LEVEL_USER
-    ACCESS_LEVEL_ADMIN
-)
-
 // config syncronization
 var (
-    netAccessList []*AccessNet
     netCfgLock sync.RWMutex
 )
-
-type AccessNet struct {
-    Level  int
-    Subnet *net.IPNet
-}
-
-// netAccessList maps CIDR networks to access levels for IP-based
-// security of request handlers.
-func GetAccessLevel (host string) int {
-    netCfgLock.RLock()
-    defer netCfgLock.RUnlock()
-
-    ip := net.ParseIP(host)
-
-    for i := range netAccessList {
-        if netAccessList[i].Subnet.Contains(ip) {
-            return netAccessList[i].Level
-        }
-    }
-
-    return ACCESS_LEVEL_NONE
-}
 
 // privateNets returns a list of private, reserved, network segments.
 func PrivateNets() []*net.IPNet {
@@ -111,7 +82,6 @@ func (this *srvAppListener) listen(addr string) error {
 
 type UriHandler struct {
     Handler        http.Handler
-    HitCounter     uint64
     Pattern        string
     RequiredAccess int
 }
@@ -135,13 +105,15 @@ type HttpSrv struct {
 }
 
 func (this *HttpSrv) Configure(
-    privateEnabled   bool,
-    privatePort      int,
-    privateStaticDir string,
-    publicEnabled    bool,
-    publicPort       int,
-    publicStaticDir  string,
-    forceRestart     bool,
+    privateEnabled           bool,
+    privatePort              int,
+    privateStaticDir         string,
+    privateStaticAccessLevel int,
+    publicEnabled            bool,
+    publicPort               int,
+    publicStaticDir          string,
+    publicStaticAccessLevel  int,
+    forceRestart             bool,
 ) {
     this.configLock.Lock()
     defer this.configLock.Unlock()
@@ -162,16 +134,16 @@ func (this *HttpSrv) Configure(
     if this.privateStaticDir != privateStaticDir {
         this.privateStaticDir = privateStaticDir
         if privateStaticDir != "" {
-            httpSrv.RegisterHandler(
+            httpSrv.registerHandler(
                 "/", 
                 OnPrivStaticSrvUri, 
                 PRIVATE_HANDLER, 
-                ACCESS_LEVEL_ADMIN,
+                privateStaticAccessLevel,
             )
         }
         privateChanged = true
     }
-    
+
     if this.publicEnabled != publicEnabled {
         this.publicEnabled = publicEnabled
         publicChanged = true
@@ -185,11 +157,11 @@ func (this *HttpSrv) Configure(
     if this.publicStaticDir != publicStaticDir {
         this.publicStaticDir = publicStaticDir
         if publicStaticDir != "" {
-            httpSrv.RegisterHandler(
+            httpSrv.registerHandler(
                 "/", 
                 OnPubStaticSrvUri, 
                 PUBLIC_HANDLER,
-                ACCESS_LEVEL_ADMIN,
+                publicStaticAccessLevel,
             )
         }
         publicChanged = true
@@ -202,6 +174,17 @@ func (this *HttpSrv) Configure(
     if publicChanged || forceRestart {
         this.restartPublicHttp()
     }
+}
+
+func (this *HttpSrv) IsPrivateNetwork(ip string) bool {
+    for i := range privateNets {
+        ip := net.ParseIP(ip)
+        if privateNets[i].Contains(ip) {
+            return true
+        }
+    }
+
+    return false
 }
 
 func (this *HttpSrv) getNetInfo() map[string]map[string][]string {
@@ -264,15 +247,7 @@ func (this *HttpSrv) restartPrivateHttp() {
 
     // grab private network addresses
     for x := range localAddrs {
-        local := false
-        for y := range privateNets {
-            ip := net.ParseIP(localAddrs[x].String())
-            if privateNets[y].Contains(ip) {
-                local = true
-                break
-            }
-        }
-        if local {
+        if this.IsPrivateNetwork(localAddrs[x].String()) {
             addr := net.JoinHostPort(
                 localAddrs[x].String(), 
                 fmt.Sprintf("%d", this.privatePort),
@@ -388,9 +363,17 @@ func (this *HttpSrv) RegisterHandler(
     this.configLock.Lock()
     defer this.configLock.Unlock()
 
+    this.registerHandler(path, f, handlerType, accessLevel)
+}
+
+func (this *HttpSrv) registerHandler(
+    path string,
+    f func(http.ResponseWriter, *http.Request),
+    handlerType byte,
+    accessLevel int,
+) {
     uriHandler := &UriHandler {
         Handler        : http.HandlerFunc(f),
-        HitCounter     : 0,
         Pattern        : path,
         RequiredAccess : accessLevel,
     }
@@ -467,7 +450,7 @@ func NewHttpSrv() *HttpSrv {
     return newSrv
 }
 
-func initNet() {
+func netInit() {
     // populate list of local addresses
     addrs, err := net.InterfaceAddrs()
     if err != nil {
@@ -512,6 +495,9 @@ func initNet() {
     }
 
     privateNets = append(privateNets, n1, n2, n3, n4)
+
+    ipsInit()
+    geoInit()
 
     // configure http handlers
     httpSrv.RegisterHandler(
@@ -582,4 +568,9 @@ func initNet() {
         PRIVATE_HANDLER, 
         ACCESS_LEVEL_ADMIN,
     )
+}
+
+func netShutdown() {
+    geoShutdown()
+    ipsShutdown()
 }

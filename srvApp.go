@@ -188,7 +188,7 @@ func Init() {
 
     catchSigInt()
     catchCrash()
-    initNet()
+    netInit()
 
     ini.Subscribe(appConfig, onCfgChange)
 }
@@ -297,6 +297,8 @@ func setRunMode() {
 // and terminating subprocesses.
 func shutdown() bool {
     notifyShutdown()
+
+    netShutdown()
 
     Log().Close()
     
