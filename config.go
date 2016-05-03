@@ -13,6 +13,9 @@
 package srvApp
 
 import (
+    "net"
+    "strings"
+    
     "github.com/xaevman/crash"
     "github.com/xaevman/log/flog"
     "github.com/xaevman/ini"
@@ -101,6 +104,9 @@ func cfgCrashReports(cfg *ini.IniCfg) {
 
 // cfgNet configures network options when the application config changes.
 func cfgNet(cfg *ini.IniCfg, changeCount int) {
+    netCfgLock.Lock()
+    defer netCfgLock.Unlock()
+
     sec := cfg.GetSection("net")
 
     val            := sec.GetFirstVal("PrivateHttpEnabled")
@@ -126,6 +132,57 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
     val              = sec.GetFirstVal("PublicStaticDir")
     publicStaticDir := val.GetValStr(0, DefaultPublicStaticDir)
     srvLog.Debug("PUblicStaticDir: %s", publicStaticDir)
+
+    netAccessList =  make([]*AccessNet, 0)
+    vals  := sec.GetVals("AccessRights")
+    for i := range vals {
+        ip, ipNet, err := net.ParseCIDR(vals[i].GetValStr(0, ""))
+        if err != nil {
+            srvLog.Debug("%v", err)
+            continue
+        }
+
+        level  := ACCESS_LEVEL_NONE
+        lvlStr := strings.ToLower(vals[i].GetValStr(1, "None"))
+
+        switch (lvlStr) {
+        case "admin":
+            level = ACCESS_LEVEL_ADMIN
+        case "user":
+            level = ACCESS_LEVEL_USER
+        case "none":
+            level = ACCESS_LEVEL_NONE
+        default:
+            level = ACCESS_LEVEL_NONE
+        }
+
+        newNet := true
+        for i := range netAccessList {
+            if netAccessList[i].Subnet.Contains(ip) {
+                newNet = false
+                if level < netAccessList[i].Level {
+                    netAccessList[i].Level = level
+                    srvLog.Info(
+                        "Updating net %s access level: %d",
+                        ip.String(),
+                        level,
+                    )
+                }
+            }
+        }
+
+        if newNet {
+            netAccessList = append(netAccessList, &AccessNet {
+                Level  : level,
+                Subnet : ipNet,
+            })
+            srvLog.Info(
+                "Registered network %s with access level %d",
+                ip.String(),
+                level,
+            )
+        }
+    }
 
     // force "restart" on first config parse. This ensures that
     // that the http listeners are intialized if a user starts the

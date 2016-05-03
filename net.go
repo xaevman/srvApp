@@ -33,6 +33,40 @@ const (
     ALL_HANDLER
 )
 
+const (
+    ACCESS_LEVEL_NONE = iota
+    ACCESS_LEVEL_USER
+    ACCESS_LEVEL_ADMIN
+)
+
+// config syncronization
+var (
+    netAccessList []*AccessNet
+    netCfgLock sync.RWMutex
+)
+
+type AccessNet struct {
+    Level  int
+    Subnet *net.IPNet
+}
+
+// netAccessList maps CIDR networks to access levels for IP-based
+// security of request handlers.
+func GetAccessLevel (host string) int {
+    netCfgLock.RLock()
+    defer netCfgLock.RUnlock()
+
+    ip := net.ParseIP(host)
+
+    for i := range netAccessList {
+        if netAccessList[i].Subnet.Contains(ip) {
+            return netAccessList[i].Level
+        }
+    }
+
+    return ACCESS_LEVEL_NONE
+}
+
 // privateNets returns a list of private, reserved, network segments.
 func PrivateNets() []*net.IPNet {
     return privateNets
@@ -75,20 +109,27 @@ func (this *srvAppListener) listen(addr string) error {
     return nil
 }
 
+type UriHandler struct {
+    Handler        http.Handler
+    HitCounter     uint64
+    Pattern        string
+    RequiredAccess int
+}
+
 type HttpSrv struct {
     privateEnabled   bool
     privatePort      int
-    privateHandlers  map[string]func(http.ResponseWriter, *http.Request)
+    privateHandlers  map[string]*UriHandler
     privateListeners map[string]*srvAppListener
-    privateMux       *http.ServeMux
+    privateMux       *XMux
     privateSrv       *http.Server
     privateStaticDir string
     configLock       sync.RWMutex
     publicEnabled    bool
     publicPort       int
-    publicHandlers   map[string]func(http.ResponseWriter, *http.Request)
+    publicHandlers   map[string]*UriHandler
     publicListeners  map[string]*srvAppListener
-    publicMux        *http.ServeMux
+    publicMux        *XMux
     publicSrv        *http.Server
     publicStaticDir  string
 }
@@ -120,6 +161,15 @@ func (this *HttpSrv) Configure(
 
     if this.privateStaticDir != privateStaticDir {
         this.privateStaticDir = privateStaticDir
+        if privateStaticDir != "" {
+            httpSrv.RegisterHandler(
+                "/", 
+                OnPrivStaticSrvUri, 
+                PRIVATE_HANDLER, 
+                ACCESS_LEVEL_ADMIN,
+            )
+        }
+        privateChanged = true
     }
     
     if this.publicEnabled != publicEnabled {
@@ -134,6 +184,15 @@ func (this *HttpSrv) Configure(
 
     if this.publicStaticDir != publicStaticDir {
         this.publicStaticDir = publicStaticDir
+        if publicStaticDir != "" {
+            httpSrv.RegisterHandler(
+                "/", 
+                OnPubStaticSrvUri, 
+                PUBLIC_HANDLER,
+                ACCESS_LEVEL_ADMIN,
+            )
+        }
+        publicChanged = true
     }
 
     if privateChanged || forceRestart {
@@ -324,25 +383,33 @@ func (this *HttpSrv) RegisterHandler(
     path string,
     f func(http.ResponseWriter, *http.Request),
     handlerType byte,
+    accessLevel int,
 ) {
     this.configLock.Lock()
     defer this.configLock.Unlock()
 
+    uriHandler := &UriHandler {
+        Handler        : http.HandlerFunc(f),
+        HitCounter     : 0,
+        Pattern        : path,
+        RequiredAccess : accessLevel,
+    }
+
     switch handlerType {
     case PRIVATE_HANDLER:
-        this.privateHandlers[path] = f
-        this.privateMux.HandleFunc(path, f)
+        this.privateHandlers[path] = uriHandler
+        this.privateMux.HandleFunc(uriHandler)
         srvLog.Info("Private HttpHandler %s registered", path)
     case PUBLIC_HANDLER:
-        this.publicHandlers[path] = f
-        this.publicMux.HandleFunc(path, f)
+        this.publicHandlers[path] = uriHandler
+        this.publicMux.HandleFunc(uriHandler)
         srvLog.Info("Public HttpHandler %s registered", path)
     case ALL_HANDLER:
-        this.privateHandlers[path] = f
-        this.privateMux.HandleFunc(path, f)
+        this.privateHandlers[path] = uriHandler
+        this.privateMux.HandleFunc(uriHandler)
         srvLog.Info("Private HttpHandler %s registered", path)
-        this.publicHandlers[path] = f
-        this.publicMux.HandleFunc(path, f)
+        this.publicHandlers[path] = uriHandler
+        this.publicMux.HandleFunc(uriHandler)
         srvLog.Info("Public HttpHandler %s registered", path)
     default:
         srvLog.Error("Unknown handler type (%d)", handlerType)
@@ -375,13 +442,13 @@ func ValidateRequestBody(
 }
 
 func NewHttpSrv() *HttpSrv {
-    newprivateMux := http.NewServeMux()
-    newPublicMux  := http.NewServeMux()
+    newprivateMux := NewXMux()
+    newPublicMux  := NewXMux()
 
     newSrv := &HttpSrv {
         privateEnabled    : DefaultPrivateHttpEnabled,
         privatePort       : DefaultPrivateHttpPort,
-        privateHandlers   : make(map[string]func(http.ResponseWriter, *http.Request)),
+        privateHandlers   : make(map[string]*UriHandler),
         privateListeners  : make(map[string]*srvAppListener),
         privateMux        : newprivateMux,
         privateSrv        : &http.Server {
@@ -389,7 +456,7 @@ func NewHttpSrv() *HttpSrv {
         },
         publicEnabled   : DefaultPublicHttpEnabled,
         publicPort      : DefaultPublicHttpPort,
-        publicHandlers  : make(map[string]func(http.ResponseWriter, *http.Request)),
+        publicHandlers  : make(map[string]*UriHandler),
         publicListeners : make(map[string]*srvAppListener),
         publicMux       : newPublicMux,
         publicSrv       : &http.Server {
@@ -409,7 +476,7 @@ func initNet() {
     
     localAddrs = make([]*net.IP, 0)
     for i := range addrs {
-        addrParts := strings.Split(addrs[i].String(), "/")        
+        addrParts := strings.Split(addrs[i].String(), "/")
         ip := net.ParseIP(addrParts[0])
         if ip == nil {
             continue
@@ -447,16 +514,72 @@ func initNet() {
     privateNets = append(privateNets, n1, n2, n3, n4)
 
     // configure http handlers
-    httpSrv.RegisterHandler("/", OnPrivStaticSrvUri, PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/", OnPubStaticSrvUri, PUBLIC_HANDLER)
-    httpSrv.RegisterHandler("/cmd/crash/", OnCrashUri, PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/cmd/shutdown/", OnShutdownUri, PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/appinfo/", OnAppInfoUri, PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/counters/", OnCountersUri, PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/logs/", OnLogsUri, PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/pprof/", http.HandlerFunc(pprof.Index), PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/pprof/cmdline", http.HandlerFunc(pprof.Cmdline), PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/pprof/profile", http.HandlerFunc(pprof.Profile), PRIVATE_HANDLER)
-    httpSrv.RegisterHandler("/debug/pprof/symbol", http.HandlerFunc(pprof.Symbol), PRIVATE_HANDLER)
-    //httpSrv.RegisterHandler("/debug/pprof/trace", http.HandlerFunc(pprof.Trace), PRIVATE_HANDLER)
+    httpSrv.RegisterHandler(
+        "/cmd/crash/", 
+        OnCrashUri, 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/cmd/shutdown/", 
+        OnShutdownUri, 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/debug/appinfo/", 
+        OnAppInfoUri, 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/debug/counters/", 
+        OnCountersUri, 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/debug/logs/", 
+        OnLogsUri, 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/debug/pprof/", 
+        http.HandlerFunc(pprof.Index), 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/debug/pprof/cmdline", 
+        http.HandlerFunc(pprof.Cmdline), 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN)
+    
+    httpSrv.RegisterHandler(
+        "/debug/pprof/profile", 
+        http.HandlerFunc(pprof.Profile), 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/debug/pprof/symbol", 
+        http.HandlerFunc(pprof.Symbol), 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
+    
+    httpSrv.RegisterHandler(
+        "/debug/pprof/trace", 
+        http.HandlerFunc(pprof.Trace), 
+        PRIVATE_HANDLER, 
+        ACCESS_LEVEL_ADMIN,
+    )
 }
