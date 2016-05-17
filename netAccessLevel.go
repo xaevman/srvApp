@@ -11,6 +11,12 @@ const (
     ACCESS_LEVEL_ADMIN
 )
 
+var AccessLevelStr = map[int]string {
+    ACCESS_LEVEL_NONE  : "ACCESS_LEVEL_NONE",
+    ACCESS_LEVEL_USER  : "ACCESS_LEVEL_USER",
+    ACCESS_LEVEL_ADMIN : "ACCESS_LEVEL_ADMIN",
+}
+
 type AccessNet struct {
     Level  int
     Subnet *net.IPNet

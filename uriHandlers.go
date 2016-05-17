@@ -98,6 +98,11 @@ func OnLogsUri(resp http.ResponseWriter, req *http.Request) {
     resp.Write(data)
 }
 
+// OnPingUri handles requests to the /debug/ping/ uri.
+func OnPingUri(resp http.ResponseWriter, req *http.Request) {
+    resp.WriteHeader(200)
+}
+
 // OnPrivStaticSrvUri handles static file requests on the private side
 // interfaces.
 func OnPrivStaticSrvUri(resp http.ResponseWriter, req *http.Request) {

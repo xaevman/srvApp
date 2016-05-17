@@ -382,18 +382,34 @@ func (this *HttpSrv) registerHandler(
     case PRIVATE_HANDLER:
         this.privateHandlers[path] = uriHandler
         this.privateMux.HandleFunc(uriHandler)
-        srvLog.Info("Private HttpHandler %s registered", path)
+        srvLog.Info(
+            "Private HttpHandler %s registered (%s)", 
+            path,
+            AccessLevelStr[accessLevel],
+        )
     case PUBLIC_HANDLER:
         this.publicHandlers[path] = uriHandler
         this.publicMux.HandleFunc(uriHandler)
-        srvLog.Info("Public HttpHandler %s registered", path)
+        srvLog.Info(
+            "Public HttpHandler %s registered (%s)", 
+            path,
+            AccessLevelStr[accessLevel],
+        )
     case ALL_HANDLER:
         this.privateHandlers[path] = uriHandler
         this.privateMux.HandleFunc(uriHandler)
-        srvLog.Info("Private HttpHandler %s registered", path)
+        srvLog.Info(
+            "Private HttpHandler %s registered (%s)", 
+            path,
+            AccessLevelStr[accessLevel],
+        )
         this.publicHandlers[path] = uriHandler
         this.publicMux.HandleFunc(uriHandler)
-        srvLog.Info("Public HttpHandler %s registered", path)
+        srvLog.Info(
+            "Public HttpHandler %s registered (%s)", 
+            path,
+            AccessLevelStr[accessLevel],
+        )
     default:
         srvLog.Error("Unknown handler type (%d)", handlerType)
     }
@@ -535,6 +551,13 @@ func netInit() {
         ACCESS_LEVEL_ADMIN,
     )
     
+    httpSrv.RegisterHandler(
+        "/debug/ping/", 
+        OnPingUri, 
+        ALL_HANDLER, 
+        ACCESS_LEVEL_USER,
+    )
+
     httpSrv.RegisterHandler(
         "/debug/pprof/", 
         http.HandlerFunc(pprof.Index), 
