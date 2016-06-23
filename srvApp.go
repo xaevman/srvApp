@@ -2,7 +2,7 @@
 //
 //  srvApp.go
 //
-//  Copyright (c) 2015, Jared Chavez. 
+//  Copyright (c) 2015, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -41,9 +41,10 @@ const (
 func AppConfig() *ini.IniCfg {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return appConfig
 }
+
 var appConfig *ini.IniCfg
 
 // AppCounters returns a reference to the container for this application's
@@ -51,18 +52,20 @@ var appConfig *ini.IniCfg
 func AppCounters() *counters.List {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return appCounters
 }
+
 var appCounters = counters.NewList()
 
 // AppProcess returns a reference to the current process.
 func AppProcess() *os.Process {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return appProcess
 }
+
 var appProcess *os.Process
 
 // CrashDir returns the relative path to the application's crash
@@ -70,9 +73,10 @@ var appProcess *os.Process
 func CrashDir() string {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return crashDir
 }
+
 var crashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
 
 // ConfigDir returns the relative path to the application's config
@@ -80,54 +84,60 @@ var crashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
 func ConfigDir() string {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return configDir
 }
+
 var configDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "config")
 
 // EmailCrashHandler returns the email crash handler for the app.
 func EmailCrashHandler() *crash.EmailHandler {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return emailCrashHandler
 }
+
 var emailCrashHandler *crash.EmailHandler
 
 // FileCrashHandler returns the file crash handler for the app.
 func FileCrashHandler() *crash.FileHandler {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return fileCrashHandler
 }
+
 var fileCrashHandler *crash.FileHandler
 
 // Http returns a refernce to the http sever object for the application.
 func Http() *HttpSrv {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return httpSrv
 }
+
 var httpSrv = NewHttpSrv()
 
 // Log returns a refernce to the SrvLog instance for the application.
 func Log() *SrvLog {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return srvLog
 }
+
 var srvLog *SrvLog
 
 // internal log buffer object
 func LogBuffer() *log.LogBuffer {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
-    
+
     return logBuffer
 }
+
 var logBuffer *log.LogBuffer
 
 // LogDir returns the relative path to the application's log directory.
@@ -137,6 +147,7 @@ func LogDir() string {
 
     return logDir
 }
+
 var logDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
 
 // Internal vars.
@@ -145,15 +156,15 @@ var (
     modeInstallSvc   = false
     modeRunSvc       = false
     modeUninstallSvc = false
-    cfgLock            sync.RWMutex
-    runLock            sync.Mutex
-    runMode            byte
+    cfgLock          sync.RWMutex
+    runLock          sync.Mutex
+    runMode          byte
     shutdownChan     = make(chan bool, 0)
     shuttingDown     = false
 )
 
 // Init initializes the server appplication. Initializations sets up signal
-// handling, arg parsing, run mode, initializes a default config file, 
+// handling, arg parsing, run mode, initializes a default config file,
 // file and email crash handlers, both private and public facing http server
 // listeners, and some default debugging Uri handlers.
 func Init() {
@@ -209,6 +220,15 @@ func Run() {
     run()
 }
 
+// SignalShutdown ensures a config lock before calling
+// the unsafe _signalShutdown
+func SignalShutdown() {
+    cfgLock.Lock()
+    defer cfgLock.Unlock()
+
+    _signalShutdown()
+}
+
 // blockUntilShutdown does exactly what it sounds like, it blocks until
 // the shutdown signal is received, then calls Shutdown.
 func blockUntilShutdown() {
@@ -238,12 +258,12 @@ func catchCrash() {
 func catchSigInt() {
     c := make(chan os.Signal, 1)
     signal.Notify(c, os.Interrupt)
-    go func(){
+    go func() {
         defer crash.HandleAll()
 
         select {
         case <-c:
-            signalShutdown()
+            SignalShutdown()
         }
     }()
 }
@@ -254,22 +274,22 @@ func parseFlags() {
     // windows-specific options
     if runtime.GOOS == "windows" {
         flag.BoolVar(
-            &modeRunSvc, 
-            "runSvc", 
+            &modeRunSvc,
+            "runSvc",
             false,
             "Run the application as a windows service.",
         )
 
         flag.BoolVar(
-            &modeInstallSvc, 
-            "install", 
+            &modeInstallSvc,
+            "install",
             false,
             "Install the application as a windows service.",
         )
 
         flag.BoolVar(
-            &modeUninstallSvc, 
-            "uninstall", 
+            &modeUninstallSvc,
+            "uninstall",
             false,
             "Uninstall the application's service instance.",
         )
@@ -293,7 +313,7 @@ func setRunMode() {
     }
 }
 
-// shutdown handles shutting down the server process, closing open logs, 
+// shutdown handles shutting down the server process, closing open logs,
 // and terminating subprocesses.
 func shutdown() bool {
     notifyShutdown()
@@ -301,7 +321,7 @@ func shutdown() bool {
     netShutdown()
 
     Log().Close()
-    
+
     close(shutdownChan)
     close(crashChan)
 
@@ -310,17 +330,8 @@ func shutdown() bool {
         Log().Error("%v\n", err)
         return false
     }
-    
+
     return true
-}
-
-// signalShutdown ensures a config lock before calling
-// the unsafe _signalShutdown
-func signalShutdown() {
-    cfgLock.Lock()
-    defer cfgLock.Unlock()
-
-    _signalShutdown();
 }
 
 // _signalShutdown asynchronously signals the application to shutdown.
@@ -329,7 +340,7 @@ func _signalShutdown() {
 
     go func() {
         defer crash.HandleAll()
-        shutdownChan<- true
+        shutdownChan <- true
     }()
 }
 
@@ -342,11 +353,11 @@ func startSingleton() bool {
 
     if appProcess != nil {
         srvLog.Error(
-            "Application already running under PID %d\n", 
+            "Application already running under PID %d\n",
             appProcess.Pid,
         )
         return false
     }
-    
+
     return true
 }

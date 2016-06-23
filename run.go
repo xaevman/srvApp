@@ -2,7 +2,7 @@
 //
 //  run.go
 //
-//  Copyright (c) 2015, Jared Chavez. 
+//  Copyright (c) 2015, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -19,9 +19,9 @@ func afterFlags() {}
 
 // run starts a typical, console-based, application execution.
 func run() {
-    if !startSingleton() {
-        shutdownChan<- true
-    }
+	if !startSingleton() {
+		shutdownChan <- true
+	}
 
-    blockUntilShutdown()
+	blockUntilShutdown()
 }

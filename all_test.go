@@ -2,7 +2,7 @@
 //
 //  all_test.go
 //
-//  Copyright (c) 2015, Jared Chavez. 
+//  Copyright (c) 2015, Jared Chavez.
 //  All rights reserved.
 //
 //  Use of this source code is governed by a BSD-style
@@ -13,15 +13,15 @@
 package srvApp
 
 import (
-    "testing"
+	"testing"
 )
 
-func TestSrv (t *testing.T) {
-    if !StartSingleton() {
-        t.Failed()
-    }  
-    
-    if !Shutdown() {
-        t.Failed()
-    }
+func TestSrv(t *testing.T) {
+	if !StartSingleton() {
+		t.Failed()
+	}
+
+	if !Shutdown() {
+		t.Failed()
+	}
 }
