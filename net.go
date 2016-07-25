@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"net/http/pprof"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -198,22 +199,22 @@ func (this *HttpSrv) getNetInfo() map[string]map[string][]string {
 	pubHandlers := make([]string, 0, len(this.publicHandlers))
 	pubServers := make([]string, 0, len(this.publicListeners))
 
-	for k, _ := range this.privateHandlers {
+	for k := range this.privateHandlers {
 		privHandlers = append(privHandlers, k)
 	}
 	sort.Strings(privHandlers)
 
-	for k, _ := range this.privateListeners {
+	for k := range this.privateListeners {
 		privServers = append(privServers, k)
 	}
 	sort.Strings(privServers)
 
-	for k, _ := range this.publicHandlers {
+	for k := range this.publicHandlers {
 		pubHandlers = append(pubHandlers, k)
 	}
 	sort.Strings(pubHandlers)
 
-	for k, _ := range this.publicListeners {
+	for k := range this.publicListeners {
 		pubServers = append(pubServers, k)
 	}
 	sort.Strings(pubServers)
@@ -259,7 +260,7 @@ func (this *HttpSrv) restartPrivateHttp() {
 	}
 
 	// shut down old listeners
-	for k, _ := range this.privateListeners {
+	for k := range this.privateListeners {
 		this.privateListeners[k].close()
 		delete(this.privateListeners, k)
 	}
@@ -320,7 +321,7 @@ func (this *HttpSrv) restartPublicHttp() {
 	}
 
 	// shut down old listeners
-	for k, _ := range this.publicListeners {
+	for k := range this.publicListeners {
 		this.publicListeners[k].close()
 		delete(this.publicListeners, k)
 	}
@@ -429,6 +430,20 @@ func ValidateRequestBody(
 	bodyLen, err := buffer.ReadFrom(req.Body)
 	if err != nil {
 		return err
+	}
+
+	lenHdrStr, ok := req.Header["Content-Length"]
+	if ok {
+		contentLen, err := strconv.ParseInt(lenHdrStr[0], 10, 64)
+		if err == nil {
+			if contentLen != req.ContentLength {
+				return fmt.Errorf(
+					"Content-Length header does not match request ContentLength proprety (%d != %d)",
+					contentLen,
+					req.ContentLength,
+				)
+			}
+		}
 	}
 
 	if bodyLen != req.ContentLength {
