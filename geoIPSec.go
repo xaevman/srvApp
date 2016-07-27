@@ -202,7 +202,11 @@ func geoQueryCountry(host string) string {
 	var buffer bytes.Buffer
 	buffer.ReadFrom(resp.Body)
 
-	j := json.Parse(buffer.Bytes())
+	j, err := json.Parse(buffer.Bytes())
+	if err != nil {
+		return "serviceQueryFailure"
+	}
+
 	country := json.Search(j, "country_code").Value().(string)
 
 	if country == "" {
