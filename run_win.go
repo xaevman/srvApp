@@ -15,7 +15,10 @@
 package srvApp
 
 import (
+	"syscall"
+
 	"github.com/xaevman/app"
+	xsvc "github.com/xaevman/win32/svc"
 	"golang.org/x/sys/windows/svc"
 	"golang.org/x/sys/windows/svc/mgr"
 )
@@ -136,6 +139,18 @@ func installSvc() {
 		return
 	}
 
+	err = xsvc.SetFailureFlags(syscall.Handle(svc.Handle))
+	if err != nil {
+		srvLog.Error("Error setting service recovery options: %v", err)
+		return
+	}
+
+	err = svc.Start()
+	if err != nil {
+		srvLog.Error("Error starting service: %v", err)
+		return
+	}
+
 	srvLog.Info("Service %s installed", app.GetName())
 }
 
@@ -183,14 +198,16 @@ func uninstallSvc() {
 
 	defer scm.Disconnect()
 
-	svc, err := scm.OpenService(app.GetName())
+	s, err := scm.OpenService(app.GetName())
 	if err != nil {
 		srvLog.Error("Service %s doesn't exist", app.GetName())
 		return
 	}
 
-	defer svc.Close()
-	err = svc.Delete()
+	s.Control(svc.Stop)
+
+	defer s.Close()
+	err = s.Delete()
 	if err != nil {
 		srvLog.Error("Error deleting service: %v", err)
 		return
