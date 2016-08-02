@@ -152,6 +152,7 @@ var logDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
 
 // Internal vars.
 var (
+    cleanPid         = true
     crashChan        = make(chan bool, 0)
     modeInstallSvc   = false
     modeRunSvc       = false
@@ -325,10 +326,12 @@ func shutdown() bool {
     close(shutdownChan)
     close(crashChan)
 
-    err := app.DeletePidFile()
-    if err != nil {
-        Log().Error("%v\n", err)
-        return false
+    if cleanPid {
+        err := app.DeletePidFile()
+        if err != nil {
+            Log().Error("%v\n", err)
+            return false
+        }
     }
 
     return true
@@ -348,14 +351,30 @@ func _signalShutdown() {
 // that it is the only such process running.
 func startSingleton() bool {
     cfgLock.Lock()
+    defer cfgLock.Unlock()
+
     appProcess = app.GetRunStatus()
-    cfgLock.Unlock()
 
     if appProcess != nil {
         srvLog.Error(
             "Application already running under PID %d\n",
             appProcess.Pid,
         )
+
+        cleanPid = false
+        return false
+    }
+
+    _, err := app.CreatePidFile()
+    if err != nil {
+        srvLog.Error("Error creating PID file (%s)", err)
+        return false
+    }
+
+    appProcess = app.GetRunStatus()
+
+    if appProcess == nil {
+        srvLog.Error("Error finding our process")
         return false
     }
 

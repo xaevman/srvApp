@@ -82,6 +82,8 @@ func (this *appSvc) Execute(
 		}
 	}
 
+	blockUntilShutdown()
+
 	changes <- svc.Status{
 		State: svc.Stopped,
 	}
@@ -163,6 +165,7 @@ func runSvc() {
 	if err != nil {
 		srvLog.Error("Service execution error: %v", err)
 		SignalShutdown()
+		blockUntilShutdown()
 	}
 }
 
