@@ -205,7 +205,16 @@ func Init() {
     ini.Subscribe(appConfig, onCfgChange)
 }
 
-// QueryShutdown returns a value
+// QueryRunmode returns the configured runmode for the application
+func QueryRunmode() byte {
+    cfgLock.RLock()
+    defer cfgLock.RUnlock()
+
+    return runMode
+}
+
+// QueryShutdown returns a boolean values indicating whether or not
+// the application is shutting down
 func QueryShutdown() bool {
     cfgLock.RLock()
     defer cfgLock.RUnlock()
