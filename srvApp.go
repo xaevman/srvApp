@@ -37,6 +37,15 @@ const (
     UNINST_SVC
 )
 
+// RunCfg represents the desired run configuration for the application before
+// ini or command line flag based options are taken into consideration. This can
+// currently be used to force enable/disable the http listeners depending on run
+// mode.
+type RunCfg struct {
+    InitSrvCmd bool
+    InitSrvSvc bool
+}
+
 // AppConfig returns a reference to the application's configuration file.
 func AppConfig() *ini.IniCfg {
     cfgLock.RLock()
@@ -162,18 +171,29 @@ var (
     runMode          byte
     shutdownChan     = make(chan bool, 0)
     shuttingDown     = false
+    runCfg           *RunCfg
 )
 
-// Init initializes the server appplication. Initializations sets up signal
+// Init calls InitCfg to initialize the server appplication with a default configuration.
+func Init() {
+    InitCfg(&RunCfg{
+        InitSrvCmd: true,
+        InitSrvSvc: true,
+    })
+}
+
+// InitCfg Initializations sets up signal
 // handling, arg parsing, run mode, initializes a default config file,
 // file and email crash handlers, both private and public facing http server
 // listeners, and some default debugging Uri handlers.
-func Init() {
+func InitCfg(cfg *RunCfg) {
     runLock.Lock()
     defer runLock.Unlock()
 
     cfgLock.Lock()
     defer cfgLock.Unlock()
+
+    runCfg = cfg
 
     os.Chdir(app.GetExeDir())
 

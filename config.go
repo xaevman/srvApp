@@ -106,6 +106,14 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 	netCfgLock.Lock()
 	defer netCfgLock.Unlock()
 
+	if !runCfg.InitSrvCmd && runMode != RUN_SVC {
+		return
+	}
+
+	if !runCfg.InitSrvSvc && runMode == RUN_SVC {
+		return
+	}
+
 	sec := cfg.GetSection("net")
 
 	val := sec.GetFirstVal("PrivateHttpEnabled")
