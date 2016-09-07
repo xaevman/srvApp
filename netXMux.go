@@ -28,6 +28,8 @@ type XMux struct {
 	cntIPDeny       counters.Counter
 	cntThrottleDeny counters.Counter
 	cntSuccess      counters.Counter
+
+	TLSRedirect bool
 }
 
 type muxEntry struct {
@@ -48,6 +50,7 @@ func NewXMux() *XMux {
 		cntIPDeny:       counters.NewUint(fmt.Sprintf("net.xmux.%d.ip_deny", newId)),
 		cntThrottleDeny: counters.NewUint(fmt.Sprintf("net.xmux.%d.throttle_deny", newId)),
 		cntSuccess:      counters.NewUint(fmt.Sprintf("net.xmux.%d.success", newId)),
+		TLSRedirect:     false,
 	}
 
 	appCounters.Add(newMux.cntParseFailed)
@@ -157,6 +160,12 @@ func (mux *XMux) handler(host, path string) (h *UriHandler, pattern string) {
 // ServeHTTP dispatches the request to the handler whose
 // pattern most closely matches the request URL.
 func (mux *XMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.TLS == nil && mux.TLSRedirect {
+		url := fmt.Sprintf("https://%s%s", r.Host, r.URL)
+		http.Redirect(w, r, url, http.StatusMovedPermanently)
+		return
+	}
+
 	if r.RequestURI == "*" {
 		if r.ProtoAtLeast(1, 1) {
 			w.Header().Set("Connection", "close")

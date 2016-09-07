@@ -15,7 +15,9 @@ package srvApp
 import (
 	"github.com/xaevman/crash"
 
+	"bufio"
 	"bytes"
+	"crypto/tls"
 	"fmt"
 	"net"
 	"net/http"
@@ -25,6 +27,7 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
+	"time"
 )
 
 // HandlerType enumeration.
@@ -54,17 +57,49 @@ func LocalAddrs() []*net.IP {
 
 var localAddrs []*net.IP
 
-type srvAppListener struct {
-	listener *net.TCPListener
-	closing  int32
+type Conn struct {
+	net.Conn
+	buffer *bufio.Reader
 }
 
-func (this *srvAppListener) close() {
+func (bc *Conn) Read(b []byte) (int, error) {
+	return bc.buffer.Read(b)
+}
+
+type srvAppListener struct {
+	listener net.Listener
+	closing  int32
+	config   *tls.Config
+}
+
+func (this *srvAppListener) Addr() net.Addr {
+	return this.listener.Addr()
+}
+
+func (this *srvAppListener) Accept() (net.Conn, error) {
+	c, err := this.listener.Accept()
+	if err != nil {
+		srvLog.Error("%s", err)
+		return nil, err
+	}
+
+	if this.config == nil {
+		srvLog.Debug("HTTP Conn intiialized (%s)", c.RemoteAddr())
+		return c, err
+	} else {
+		srvLog.Debug("TLS Conn intiialized (%s)", c.RemoteAddr())
+		return tls.Server(c, this.config), nil
+	}
+}
+
+func (this *srvAppListener) Close() error {
 	atomic.StoreInt32(&this.closing, 1)
 	err := this.listener.Close()
 	if err != nil {
 		srvLog.Error("%v", err)
 	}
+
+	return err
 }
 
 func (this *srvAppListener) isClosing() bool {
@@ -72,13 +107,19 @@ func (this *srvAppListener) isClosing() bool {
 	return val == 1
 }
 
-func (this *srvAppListener) listen(addr string) error {
+func (this *srvAppListener) String() string {
+	return this.listener.Addr().String()
+}
+
+func (this *srvAppListener) listen(addr string, tlsCfg *tls.Config) error {
+	this.config = tlsCfg
+
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
-	this.listener = ln.(*net.TCPListener)
+	this.listener = ln
 
 	return nil
 }
@@ -90,32 +131,35 @@ type UriHandler struct {
 }
 
 type HttpSrv struct {
-	privateEnabled   bool
 	privatePort      int
+	privateTLSPort   int
 	privateHandlers  map[string]*UriHandler
 	privateListeners map[string]*srvAppListener
 	privateMux       *XMux
 	privateSrv       *http.Server
 	privateStaticDir string
 	configLock       sync.RWMutex
-	publicEnabled    bool
 	publicPort       int
+	publicTLSPort    int
 	publicHandlers   map[string]*UriHandler
 	publicListeners  map[string]*srvAppListener
 	publicMux        *XMux
 	publicSrv        *http.Server
 	publicStaticDir  string
+	tlsCfg           *tls.Config
 }
 
 func (this *HttpSrv) Configure(
-	privateEnabled bool,
 	privatePort int,
+	privateTLSPort int,
 	privateStaticDir string,
 	privateStaticAccessLevel int,
-	publicEnabled bool,
 	publicPort int,
+	publicTLSPort int,
 	publicStaticDir string,
 	publicStaticAccessLevel int,
+	tlsRedirect bool,
+	certMap map[string]*tls.Certificate,
 	forceRestart bool,
 ) {
 	this.configLock.Lock()
@@ -124,13 +168,13 @@ func (this *HttpSrv) Configure(
 	privateChanged := false
 	publicChanged := false
 
-	if this.privateEnabled != privateEnabled {
-		this.privateEnabled = privateEnabled
+	if this.privatePort != privatePort {
+		this.privatePort = privatePort
 		privateChanged = true
 	}
 
-	if this.privatePort != privatePort {
-		this.privatePort = privatePort
+	if this.privateTLSPort != privateTLSPort {
+		this.privateTLSPort = privateTLSPort
 		privateChanged = true
 	}
 
@@ -147,13 +191,13 @@ func (this *HttpSrv) Configure(
 		privateChanged = true
 	}
 
-	if this.publicEnabled != publicEnabled {
-		this.publicEnabled = publicEnabled
+	if this.publicPort != publicPort {
+		this.publicPort = publicPort
 		publicChanged = true
 	}
 
-	if this.publicPort != publicPort {
-		this.publicPort = publicPort
+	if this.publicTLSPort != publicTLSPort {
+		this.publicTLSPort = publicTLSPort
 		publicChanged = true
 	}
 
@@ -169,6 +213,8 @@ func (this *HttpSrv) Configure(
 		}
 		publicChanged = true
 	}
+
+	this.configureTLS(certMap, tlsRedirect)
 
 	if privateChanged || forceRestart {
 		this.restartPrivateHttp()
@@ -188,6 +234,37 @@ func (this *HttpSrv) IsPrivateNetwork(ip string) bool {
 	}
 
 	return false
+}
+
+func (this *HttpSrv) configureTLS(certMap map[string]*tls.Certificate, tlsRedirect bool) {
+	if len(certMap) > 0 {
+		certs := make([]tls.Certificate, 0, len(certMap))
+		for k := range certMap {
+			certs = append(certs, *certMap[k])
+		}
+
+		this.tlsCfg = &tls.Config{
+			Certificates:      certs,
+			NameToCertificate: certMap,
+			NextProtos:        []string{"http/1.1"},
+		}
+
+		if this.privateTLSPort > 0 && tlsRedirect {
+			this.privateMux.TLSRedirect = true
+		} else {
+			this.privateMux.TLSRedirect = false
+		}
+
+		if this.publicTLSPort > 0 && tlsRedirect {
+			this.publicMux.TLSRedirect = true
+		} else {
+			this.publicMux.TLSRedirect = false
+		}
+	} else {
+		this.tlsCfg = nil
+		this.privateMux.TLSRedirect = false
+		this.publicMux.TLSRedirect = false
+	}
 }
 
 func (this *HttpSrv) getNetInfo() map[string]map[string][]string {
@@ -246,46 +323,93 @@ func (this *HttpSrv) pubStaticDir() string {
 }
 
 func (this *HttpSrv) restartPrivateHttp() {
-	addrList := make([]string, 0)
-
 	// grab private network addresses
+	httpList := make(map[string]string)
+	TLSList := make(map[string]string)
 	for x := range localAddrs {
 		if this.IsPrivateNetwork(localAddrs[x].String()) {
-			addr := net.JoinHostPort(
-				localAddrs[x].String(),
-				fmt.Sprintf("%d", this.privatePort),
-			)
-			addrList = append(addrList, addr)
+			if this.privatePort > 0 {
+				httpAddr := net.JoinHostPort(
+					localAddrs[x].String(),
+					fmt.Sprintf("%d", this.privatePort),
+				)
+				httpList[httpAddr] = httpAddr
+			}
+
+			if this.privateTLSPort > 0 {
+				tlsAddr := net.JoinHostPort(
+					localAddrs[x].String(),
+					fmt.Sprintf("%d", this.privateTLSPort),
+				)
+				TLSList[tlsAddr] = tlsAddr
+			}
 		}
 	}
 
 	// shut down old listeners
 	for k := range this.privateListeners {
-		this.privateListeners[k].close()
+		_, ok := httpList[k]
+		if ok {
+			delete(httpList, k)
+			continue
+		}
+
+		_, ok = TLSList[k]
+		if ok {
+			delete(TLSList, k)
+			continue
+		}
+
+		// old listener - shut it down
+		this.privateListeners[k].Close()
 		delete(this.privateListeners, k)
 	}
 
-	// start up new listeners
-	if !this.privateEnabled {
-		return
-	}
-
-	for i := range addrList {
+	// start up new http listeners
+	for i := range httpList {
 		ln := &srvAppListener{}
-		err := ln.listen(addrList[i])
+		err := ln.listen(httpList[i], nil)
 		if err != nil {
 			srvLog.Error("%v", err)
 			continue
 		}
 
-		this.privateListeners[addrList[i]] = ln
+		this.privateListeners[httpList[i]] = ln
 
-		srvLog.Debug("Initializing PrivateHttp %s", addrList[i])
+		srvLog.Debug("Initializing PrivateHttp %s", httpList[i])
 		go func(ln *srvAppListener) {
 			defer crash.HandleAll()
 
-			err := this.privateSrv.Serve(ln.listener)
+			err := this.privateSrv.Serve(ln)
 			if ln.isClosing() {
+				srvLog.Info("Shutting down listener %s", ln)
+				return
+			}
+
+			if err != nil {
+				srvLog.Error("%v", err)
+			}
+		}(ln)
+	}
+
+	// start up TLS listeners
+	for i := range TLSList {
+		ln := &srvAppListener{}
+		err := ln.listen(TLSList[i], this.tlsCfg)
+		if err != nil {
+			srvLog.Error("%v", err)
+			continue
+		}
+
+		this.privateListeners[TLSList[i]] = ln
+
+		srvLog.Debug("Initializing PrivateTLS %s", TLSList[i])
+		go func(ln *srvAppListener) {
+			defer crash.HandleAll()
+
+			err := this.privateSrv.Serve(ln)
+			if ln.isClosing() {
+				srvLog.Info("Shutting down listener %s", ln)
 				return
 			}
 
@@ -297,9 +421,9 @@ func (this *HttpSrv) restartPrivateHttp() {
 }
 
 func (this *HttpSrv) restartPublicHttp() {
-	addrList := make([]string, 0)
-
 	// grab private network addresses
+	httpList := make(map[string]string)
+	TLSList := make(map[string]string)
 	for x := range localAddrs {
 		local := false
 
@@ -312,41 +436,88 @@ func (this *HttpSrv) restartPublicHttp() {
 		}
 
 		if !local {
-			addr := net.JoinHostPort(
-				localAddrs[x].String(),
-				fmt.Sprintf("%d", this.publicPort),
-			)
-			addrList = append(addrList, addr)
+			if this.publicPort > 0 {
+				httpAddr := net.JoinHostPort(
+					localAddrs[x].String(),
+					fmt.Sprintf("%d", this.publicPort),
+				)
+				httpList[httpAddr] = httpAddr
+			}
+
+			if this.publicTLSPort > 0 {
+				tlsAddr := net.JoinHostPort(
+					localAddrs[x].String(),
+					fmt.Sprintf("%d", this.publicTLSPort),
+				)
+				TLSList[tlsAddr] = tlsAddr
+			}
 		}
 	}
 
 	// shut down old listeners
 	for k := range this.publicListeners {
-		this.publicListeners[k].close()
+		_, ok := httpList[k]
+		if ok {
+			delete(httpList, k)
+			continue
+		}
+
+		_, ok = TLSList[k]
+		if ok {
+			delete(TLSList, k)
+			continue
+		}
+
+		// old listener - shut it down
+		this.publicListeners[k].Close()
 		delete(this.publicListeners, k)
 	}
 
-	// start up new listeners
-	if !this.publicEnabled {
-		return
-	}
-
-	for i := range addrList {
+	// start up new http listeners
+	for i := range httpList {
 		ln := &srvAppListener{}
-		err := ln.listen(addrList[i])
+		err := ln.listen(httpList[i], nil)
 		if err != nil {
 			srvLog.Error("%v", err)
 			continue
 		}
 
-		this.publicListeners[addrList[i]] = ln
+		this.publicListeners[httpList[i]] = ln
 
-		srvLog.Debug("Initializing PublicHttp %s", addrList[i])
+		srvLog.Debug("Initializing PublicHttp %s", httpList[i])
 		go func(ln *srvAppListener) {
 			defer crash.HandleAll()
 
-			err := this.publicSrv.Serve(ln.listener)
+			err := this.publicSrv.Serve(ln)
 			if ln.isClosing() {
+				srvLog.Info("Shutting down listener %s", ln)
+				return
+			}
+
+			if err != nil {
+				srvLog.Error("%v", err)
+			}
+		}(ln)
+	}
+
+	// start up new TLS listeners
+	for i := range TLSList {
+		ln := &srvAppListener{}
+		err := ln.listen(TLSList[i], this.tlsCfg)
+		if err != nil {
+			srvLog.Error("%v", err)
+			continue
+		}
+
+		this.publicListeners[TLSList[i]] = ln
+
+		srvLog.Debug("Initializing PublicHttp %s", TLSList[i])
+		go func(ln *srvAppListener) {
+			defer crash.HandleAll()
+
+			err := this.publicSrv.Serve(ln)
+			if ln.isClosing() {
+				srvLog.Info("Shutting down listener %s", ln)
 				return
 			}
 
@@ -458,25 +629,27 @@ func ValidateRequestBody(
 }
 
 func NewHttpSrv() *HttpSrv {
-	newprivateMux := NewXMux()
+	newPrivateMux := NewXMux()
 	newPublicMux := NewXMux()
 
 	newSrv := &HttpSrv{
-		privateEnabled:   DefaultPrivateHttpEnabled,
 		privatePort:      DefaultPrivateHttpPort,
 		privateHandlers:  make(map[string]*UriHandler),
 		privateListeners: make(map[string]*srvAppListener),
-		privateMux:       newprivateMux,
+		privateMux:       newPrivateMux,
 		privateSrv: &http.Server{
-			Handler: newprivateMux,
+			Handler:      newPrivateMux,
+			ReadTimeout:  time.Duration(10 * time.Second),
+			WriteTimeout: time.Duration(10 * time.Second),
 		},
-		publicEnabled:   DefaultPublicHttpEnabled,
 		publicPort:      DefaultPublicHttpPort,
 		publicHandlers:  make(map[string]*UriHandler),
 		publicListeners: make(map[string]*srvAppListener),
 		publicMux:       newPublicMux,
 		publicSrv: &http.Server{
-			Handler: newPublicMux,
+			Handler:      newPublicMux,
+			ReadTimeout:  time.Duration(10 * time.Second),
+			WriteTimeout: time.Duration(10 * time.Second),
 		},
 	}
 

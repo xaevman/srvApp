@@ -15,14 +15,15 @@ package srvApp
 const (
 	DefaultHttpLogBuffers = 100
 
-	DefaultPrivateHttpEnabled       = true
-	DefaultPrivateHttpPort          = 8081
+	DefaultPrivateHttpPort          = 0
+	DefaultPrivateTLSPort           = 0
 	DefaultPrivateStaticDir         = ""
 	DefaultPrivateStaticAccessLevel = "admin"
-	DefaultPublicHttpEnabled        = false
-	DefaultPublicHttpPort           = 8080
+	DefaultPublicHttpPort           = 0
+	DefaultPublicTLSPort            = 0
 	DefaultPublicStaticDir          = ""
 	DefaultPublicStaticAccessLevel  = "admin"
+	DefaultTLSRedirect              = true
 
 	DefaultSmtpFromAddr = ""
 	DefaultSmtpSrvAddr  = "smtp"

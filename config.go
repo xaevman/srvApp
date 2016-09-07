@@ -13,7 +13,9 @@
 package srvApp
 
 import (
+	"crypto/tls"
 	"net"
+	"path/filepath"
 
 	"github.com/xaevman/crash"
 	"github.com/xaevman/ini"
@@ -35,7 +37,7 @@ func cfgLogs(cfg *ini.IniCfg) {
 	sec := cfg.GetSection("app")
 	val := sec.GetFirstVal("HttpLogBuffers")
 	iVal := val.GetValInt(0, DefaultHttpLogBuffers)
-	srvLog.Debug("HttpLogBuffers: %d", iVal)
+	srvLog.Info("HttpLogBuffers: %d", iVal)
 
 	logBuffer.SetMaxSize(iVal)
 
@@ -47,12 +49,12 @@ func cfgLogs(cfg *ini.IniCfg) {
 	val = sec.GetFirstVal("DebugFlushIntervalSec")
 	i32Val := int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
 	srvLog.SetFlushIntervalSec("debug", i32Val)
-	srvLog.Debug("DebugFlushIntervalSec set (%d)", i32Val)
+	srvLog.Info("DebugFlushIntervalSec set (%d)", i32Val)
 
 	val = sec.GetFirstVal("InfoFlushIntervalSec")
 	i32Val = int32(val.GetValInt(0, flog.DefaultFlushIntervalSec))
 	srvLog.SetFlushIntervalSec("info", i32Val)
-	srvLog.Debug("InfoFlushIntervalSec set (%d)", i32Val)
+	srvLog.Info("InfoFlushIntervalSec set (%d)", i32Val)
 
 }
 
@@ -63,17 +65,17 @@ func cfgCrashReports(cfg *ini.IniCfg) {
 
 	val := sec.GetFirstVal("VerboseCrashReports")
 	bVal := val.GetValBool(0, DefaultVerboseCrashReports)
-	srvLog.Debug("VerboseCrashReports set (%t)", bVal)
+	srvLog.Info("VerboseCrashReports set (%t)", bVal)
 	crash.SetVerboseCrashReport(bVal)
 
 	val = sec.GetFirstVal("SmtpSrvAddr")
 	sVal := val.GetValStr(0, DefaultSmtpSrvAddr)
-	srvLog.Debug("SmtpSrvAddr set (%s)", sVal)
+	srvLog.Info("SmtpSrvAddr set (%s)", sVal)
 	emailCrashHandler.SrvAddr = sVal
 
 	val = sec.GetFirstVal("SmtpSrvPort")
 	iVal := val.GetValInt(0, DefaultSmtpSrvPort)
-	srvLog.Debug("SmtpSrvPort set (%d)", iVal)
+	srvLog.Info("SmtpSrvPort set (%d)", iVal)
 	emailCrashHandler.SrvPort = iVal
 
 	val = sec.GetFirstVal("SmtpUser")
@@ -84,7 +86,7 @@ func cfgCrashReports(cfg *ini.IniCfg) {
 
 	val = sec.GetFirstVal("SmtpFromAddr")
 	sVal = val.GetValStr(0, DefaultSmtpFromAddr)
-	srvLog.Debug("SmtpFromAddr set (%s)", sVal)
+	srvLog.Info("SmtpFromAddr set (%s)", sVal)
 	emailCrashHandler.FromAddr = sVal
 
 	vals := sec.GetVals("SmtpToAddr")
@@ -92,7 +94,7 @@ func cfgCrashReports(cfg *ini.IniCfg) {
 	for i := range vals {
 		sVal = vals[i].GetValStr(0, "")
 		if sVal != "" {
-			srvLog.Debug("Added ToAddr: %s", sVal)
+			srvLog.Info("Added ToAddr: %s", sVal)
 			emailCrashHandler.ToAddrs = append(
 				emailCrashHandler.ToAddrs,
 				sVal,
@@ -116,38 +118,69 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 
 	sec := cfg.GetSection("net")
 
-	val := sec.GetFirstVal("PrivateHttpEnabled")
-	privateEnabled := val.GetValBool(0, DefaultPrivateHttpEnabled)
-	srvLog.Debug("PrivateHttpEnabled: %t", privateEnabled)
-
-	val = sec.GetFirstVal("PrivateHttpPort")
+	val := sec.GetFirstVal("PrivateHttpPort")
 	privatePort := val.GetValInt(0, DefaultPrivateHttpPort)
-	srvLog.Debug("PrivateHttpPort: %d", privatePort)
+	srvLog.Info("PrivateHttpPort: %d", privatePort)
 
 	val = sec.GetFirstVal("PrivateStaticDir")
 	privateStaticDir := val.GetValStr(0, DefaultPrivateStaticDir)
 	privateStaticAccessLevel := parseAccessLevel(val.GetValStr(1, DefaultPrivateStaticAccessLevel))
-	srvLog.Debug("PrivateStaticDir: %s", privateStaticDir)
-
-	val = sec.GetFirstVal("PublicHttpEnabled")
-	publicEnabled := val.GetValBool(0, DefaultPublicHttpEnabled)
-	srvLog.Debug("PublicHttpEnabled: %t", publicEnabled)
+	srvLog.Info("PrivateStaticDir: %s", privateStaticDir)
 
 	val = sec.GetFirstVal("PublicHttpPort")
 	publicPort := val.GetValInt(0, DefaultPublicHttpPort)
-	srvLog.Debug("PublicHttpPort: %d", publicPort)
+	srvLog.Info("PublicHttpPort: %d", publicPort)
 
 	val = sec.GetFirstVal("PublicStaticDir")
 	publicStaticDir := val.GetValStr(0, DefaultPublicStaticDir)
 	publicStaticAccessLevel := parseAccessLevel(val.GetValStr(1, DefaultPublicStaticAccessLevel))
-	srvLog.Debug("PUblicStaticDir: %s", publicStaticDir)
+	srvLog.Info("PUblicStaticDir: %s", publicStaticDir)
 
+	// TLS
+	val = sec.GetFirstVal("TLSRedirect")
+	tlsRedirect := val.GetValBool(0, DefaultTLSRedirect)
+	srvLog.Info("TLSRedirect: %t", tlsRedirect)
+
+	val = sec.GetFirstVal("PrivateTLSPort")
+	privateTLSPort := val.GetValInt(0, DefaultPrivateTLSPort)
+	srvLog.Info("PrivateTLSPort: %d", privateTLSPort)
+
+	val = sec.GetFirstVal("PublicTLSPort")
+	publicTLSPort := val.GetValInt(0, DefaultPublicTLSPort)
+	srvLog.Info("PrivateTLSPort: %d", publicTLSPort)
+
+	certMap := make(map[string]*tls.Certificate)
+	vals := sec.GetVals("CertMap")
+	for i := range vals {
+		domain := vals[i].GetValStr(0, "")
+		cert := vals[i].GetValStr(1, "")
+		key := vals[i].GetValStr(2, "")
+
+		if len(domain) < 1 || len(cert) < 1 || len(key) < 1 {
+			continue
+		}
+
+		certPath := filepath.Join(configDir, cert)
+		keyPath := filepath.Join(configDir, key)
+
+		kp, err := tls.LoadX509KeyPair(certPath, keyPath)
+		if err != nil {
+			srvLog.Error("%s", err)
+			continue
+		}
+
+		certMap[domain] = &kp
+
+		srvLog.Info("CertMap defined: %s -> Cert: %s, Key: %s", domain, cert, key)
+	}
+
+	// Access control
 	netAccessList = make([]*AccessNet, 0)
-	vals := sec.GetVals("AccessRights")
+	vals = sec.GetVals("AccessRights")
 	for i := range vals {
 		ip, ipNet, err := net.ParseCIDR(vals[i].GetValStr(0, ""))
 		if err != nil {
-			srvLog.Debug("%v", err)
+			srvLog.Info("%v", err)
 			continue
 		}
 
@@ -186,14 +219,16 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 	forceRestart := (changeCount == 0)
 
 	httpSrv.Configure(
-		privateEnabled,
 		privatePort,
+		privateTLSPort,
 		privateStaticDir,
 		privateStaticAccessLevel,
-		publicEnabled,
 		publicPort,
+		publicTLSPort,
 		publicStaticDir,
 		publicStaticAccessLevel,
+		tlsRedirect,
+		certMap,
 		forceRestart,
 	)
 }
