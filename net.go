@@ -84,10 +84,10 @@ func (this *srvAppListener) Accept() (net.Conn, error) {
 	}
 
 	if this.config == nil {
-		srvLog.Debug("HTTP Conn intiialized (%s)", c.RemoteAddr())
+		//srvLog.Debug("HTTP Conn intiialized (%s)", c.RemoteAddr())
 		return c, err
 	} else {
-		srvLog.Debug("TLS Conn intiialized (%s)", c.RemoteAddr())
+		//srvLog.Debug("TLS Conn intiialized (%s)", c.RemoteAddr())
 		return tls.Server(c, this.config), nil
 	}
 }
@@ -639,8 +639,8 @@ func NewHttpSrv() *HttpSrv {
 		privateMux:       newPrivateMux,
 		privateSrv: &http.Server{
 			Handler:      newPrivateMux,
-			ReadTimeout:  time.Duration(10 * time.Second),
-			WriteTimeout: time.Duration(10 * time.Second),
+			ReadTimeout:  time.Duration(5 * time.Minute),
+			WriteTimeout: time.Duration(5 * time.Minute),
 		},
 		publicPort:      DefaultPublicHttpPort,
 		publicHandlers:  make(map[string]*UriHandler),
@@ -648,8 +648,8 @@ func NewHttpSrv() *HttpSrv {
 		publicMux:       newPublicMux,
 		publicSrv: &http.Server{
 			Handler:      newPublicMux,
-			ReadTimeout:  time.Duration(10 * time.Second),
-			WriteTimeout: time.Duration(10 * time.Second),
+			ReadTimeout:  time.Duration(5 * time.Minute),
+			WriteTimeout: time.Duration(5 * time.Minute),
 		},
 	}
 
