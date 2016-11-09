@@ -21,6 +21,7 @@ import (
     "os/signal"
     "runtime"
     "sync"
+    // "time"
 
     "github.com/xaevman/app"
     "github.com/xaevman/counters"
@@ -264,6 +265,11 @@ func SignalShutdown() {
 func blockUntilShutdown() {
     <-shutdownChan
     shutdown()
+
+    // for count := runtime.NumGoroutine(); count > 1; {
+    //     fmt.Printf("%d goroutines still running...\n", count)
+    //     <-time.After(1 * time.Second)
+    // }
 }
 
 // catchCrash catches the user-initiated crash signal and happily panics

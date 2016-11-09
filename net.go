@@ -146,6 +146,7 @@ type HttpSrv struct {
 	publicMux        *XMux
 	publicSrv        *http.Server
 	publicStaticDir  string
+	ignoreAddrs      []string
 	tlsCfg           *tls.Config
 }
 
@@ -158,12 +159,15 @@ func (this *HttpSrv) Configure(
 	publicTLSPort int,
 	publicStaticDir string,
 	publicStaticAccessLevel int,
+	ignoreAddrs []string,
 	tlsRedirect bool,
 	certMap map[string]*tls.Certificate,
 	forceRestart bool,
 ) {
 	this.configLock.Lock()
 	defer this.configLock.Unlock()
+
+	this.ignoreAddrs = ignoreAddrs
 
 	privateChanged := false
 	publicChanged := false
@@ -225,7 +229,21 @@ func (this *HttpSrv) Configure(
 	}
 }
 
+func (this *HttpSrv) isIgnoreAddr(ip string) bool {
+	for i := range this.ignoreAddrs {
+		if this.ignoreAddrs[i] == ip {
+			return true
+		}
+	}
+
+	return false
+}
+
 func (this *HttpSrv) IsPrivateNetwork(ip string) bool {
+	if this.isIgnoreAddr(ip) {
+		return false
+	}
+
 	for i := range privateNets {
 		ip := net.ParseIP(ip)
 		if privateNets[i].Contains(ip) {

@@ -213,6 +213,16 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 		}
 	}
 
+	// ignore addresses for listen binding
+	ignoreAddrs := make([]string, 0)
+	vals = sec.GetVals("BindIgnore")
+	for i := range vals {
+		addr := vals[i].GetValStr(0, "")
+		if len(addr) > 0 {
+			ignoreAddrs = append(ignoreAddrs, addr)
+		}
+	}
+
 	// force "restart" on first config parse. This ensures that
 	// that the http listeners are intialized if a user starts the
 	// server with all default vaules.
@@ -227,6 +237,7 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 		publicTLSPort,
 		publicStaticDir,
 		publicStaticAccessLevel,
+		ignoreAddrs,
 		tlsRedirect,
 		certMap,
 		forceRestart,
