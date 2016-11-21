@@ -47,12 +47,6 @@ type IPStatus struct {
 	StatLock sync.Mutex `json:"-"`
 }
 
-func (this *IPStatus) deleteReqAtIndex(i int) {
-	this.Requests[i] = this.Requests[len(this.Requests)-1]
-	this.Requests[len(this.Requests)-1] = nil
-	this.Requests = this.Requests[:len(this.Requests)-1]
-}
-
 type ReqStatus struct {
 	AccessLevel int
 	Path        string
@@ -144,14 +138,17 @@ func ipsPurgeOldStats() {
 	maxReqAgeHrs := ipsGetMaxReqAgeHrs()
 	purgeCount := 0
 
-	for k, _ := range ipsStats {
+	for k := range ipsStats {
 		ipsStats[k].StatLock.Lock()
 		defer ipsStats[k].StatLock.Unlock()
 
-		for i := range ipsStats[k].Requests {
+		for i := len(ipsStats[k].Requests) - 1; i > -1; i-- {
 			dt := time.Since(ipsStats[k].Requests[i].Timestamp)
 			if dt.Hours() > maxReqAgeHrs {
-				ipsStats[k].deleteReqAtIndex(i)
+				ipsStats[k].Requests = append(
+					ipsStats[k].Requests[:i],
+					ipsStats[k].Requests[i+1:]...,
+				)
 				purgeCount++
 			}
 		}
