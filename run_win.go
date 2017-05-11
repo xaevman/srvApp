@@ -51,7 +51,7 @@ func (this *appSvc) Execute(
 			State: svc.StopPending,
 		}
 
-		SignalShutdown()
+		SignalShutdown(1)
 	}
 
 	Log().Info("Service initialized")
@@ -62,9 +62,9 @@ func (this *appSvc) Execute(
 
 	for !shuttingDown {
 		select {
-		case <-shutdownChan:
+		case resultCode := <-shutdownChan:
 			Log().Debug("Service shutdown signal received")
-			shutdown()
+			shutdown(resultCode)
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Interrogate:
@@ -75,7 +75,7 @@ func (this *appSvc) Execute(
 				changes <- svc.Status{
 					State: svc.StopPending,
 				}
-				SignalShutdown()
+				SignalShutdown(0)
 			default:
 				Log().Error(
 					"Unhandled signal received from SCM: %v",
@@ -85,7 +85,8 @@ func (this *appSvc) Execute(
 		}
 	}
 
-	blockUntilShutdown()
+	ssec = false
+	errno = uint32(blockUntilShutdown())
 
 	changes <- svc.Status{
 		State: svc.Stopped,
@@ -107,12 +108,11 @@ func afterFlags() {
 
 // installSvc attempts to install the running binary as a windows service.
 func installSvc() {
-	defer _signalShutdown()
-
 	srvLog.Info("Installing service %s", app.GetName())
 	scm, err := mgr.Connect()
 	if err != nil {
 		srvLog.Error("Error connecting to SCM: %v", err)
+		_signalShutdown(1)
 		return
 	}
 
@@ -121,6 +121,7 @@ func installSvc() {
 	svc, err := scm.OpenService(app.GetName())
 	if err == nil {
 		srvLog.Error("Service already exists")
+		_signalShutdown(1)
 		return
 	}
 
@@ -136,63 +137,71 @@ func installSvc() {
 
 	if err != nil {
 		srvLog.Error("Error creating service: %v", err)
+		_signalShutdown(1)
 		return
 	}
 
 	err = xsvc.SetFailureFlags(syscall.Handle(svc.Handle))
 	if err != nil {
 		srvLog.Error("Error setting service recovery options: %v", err)
+		_signalShutdown(1)
 		return
 	}
 
 	err = svc.Start()
 	if err != nil {
 		srvLog.Error("Error starting service: %v", err)
+		_signalShutdown(1)
 		return
 	}
 
 	srvLog.Info("Service %s installed", app.GetName())
+	_signalShutdown(0)
 }
 
 // run executes the application in either console or service run mode,
 // depending on the arguments supplied on the command line.
-func run() {
+func run() int {
 	switch runMode {
 	case CMDLINE:
-		runCmdline()
+		return runCmdline()
 	case RUN_SVC:
-		runSvc()
+		return runSvc()
 	}
+
+	// return error code due to invalid run code
+	return 1
 }
 
 // runCmdLine runs the application in console mode.
-func runCmdline() {
+func runCmdline() int {
 	if !startSingleton() {
-		SignalShutdown()
+		SignalShutdown(1)
 	}
 
-	blockUntilShutdown()
+	return blockUntilShutdown()
 }
 
 // runSvc starts the application in service mode.
-func runSvc() {
+func runSvc() int {
 	err := svc.Run(app.GetName(), &appSvc{})
 	if err != nil {
 		srvLog.Error("Service execution error: %v", err)
-		SignalShutdown()
-		blockUntilShutdown()
+		SignalShutdown(1)
+		return blockUntilShutdown()
 	}
+
+	return 0
 }
 
 // uninstallSvc attempts to uninstall the running binary from the service
 // control manager.
 func uninstallSvc() {
-	defer _signalShutdown()
-
 	srvLog.Info("Removing service %s", app.GetName())
 	scm, err := mgr.Connect()
 	if err != nil {
 		srvLog.Error("Error connecting to SCM: %v", err)
+		_signalShutdown(1)
 		return
 	}
 
@@ -201,6 +210,7 @@ func uninstallSvc() {
 	s, err := scm.OpenService(app.GetName())
 	if err != nil {
 		srvLog.Error("Service %s doesn't exist", app.GetName())
+		_signalShutdown(1)
 		return
 	}
 
@@ -210,8 +220,10 @@ func uninstallSvc() {
 	err = s.Delete()
 	if err != nil {
 		srvLog.Error("Error deleting service: %v", err)
+		_signalShutdown(1)
 		return
 	}
 
 	srvLog.Info("Service %s deleted", app.GetName())
+	_signalShutdown(0)
 }

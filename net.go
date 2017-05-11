@@ -657,8 +657,8 @@ func NewHttpSrv() *HttpSrv {
 		privateMux:       newPrivateMux,
 		privateSrv: &http.Server{
 			Handler:      newPrivateMux,
-			ReadTimeout:  time.Duration(5 * time.Minute),
-			WriteTimeout: time.Duration(5 * time.Minute),
+			ReadTimeout:  time.Duration(60 * time.Minute),
+			WriteTimeout: time.Duration(60 * time.Minute),
 		},
 		publicPort:      DefaultPublicHttpPort,
 		publicHandlers:  make(map[string]*UriHandler),
@@ -666,8 +666,8 @@ func NewHttpSrv() *HttpSrv {
 		publicMux:       newPublicMux,
 		publicSrv: &http.Server{
 			Handler:      newPublicMux,
-			ReadTimeout:  time.Duration(5 * time.Minute),
-			WriteTimeout: time.Duration(5 * time.Minute),
+			ReadTimeout:  time.Duration(60 * time.Minute),
+			WriteTimeout: time.Duration(60 * time.Minute),
 		},
 	}
 

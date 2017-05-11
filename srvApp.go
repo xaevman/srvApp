@@ -170,7 +170,7 @@ var (
     cfgLock          sync.RWMutex
     runLock          sync.Mutex
     runMode          byte
-    shutdownChan     = make(chan bool, 0)
+    shutdownChan     = make(chan int, 0)
     shuttingDown     = false
     runCfg           *RunCfg
 )
@@ -244,32 +244,35 @@ func QueryShutdown() bool {
 }
 
 // Run executes the application in whatever run mode is configured.
-func Run() {
+func Run() int {
     runLock.Lock()
     defer runLock.Unlock()
 
-    run()
+    return run()
 }
 
 // SignalShutdown ensures a config lock before calling
 // the unsafe _signalShutdown
-func SignalShutdown() {
+func SignalShutdown(returnCode int) {
     cfgLock.Lock()
     defer cfgLock.Unlock()
 
-    _signalShutdown()
+    _signalShutdown(returnCode)
 }
 
 // blockUntilShutdown does exactly what it sounds like, it blocks until
 // the shutdown signal is received, then calls Shutdown.
-func blockUntilShutdown() {
-    <-shutdownChan
-    shutdown()
+func blockUntilShutdown() int {
+    returnCode := <-shutdownChan
+    returnCode = shutdown(returnCode)
 
+    // TODO: do this and kill ourselves after a timeout!
     // for count := runtime.NumGoroutine(); count > 1; {
     //     fmt.Printf("%d goroutines still running...\n", count)
     //     <-time.After(1 * time.Second)
     // }
+
+    return returnCode
 }
 
 // catchCrash catches the user-initiated crash signal and happily panics
@@ -299,7 +302,7 @@ func catchSigInt() {
 
         select {
         case <-c:
-            SignalShutdown()
+            SignalShutdown(0)
         }
     }()
 }
@@ -351,7 +354,7 @@ func setRunMode() {
 
 // shutdown handles shutting down the server process, closing open logs,
 // and terminating subprocesses.
-func shutdown() bool {
+func shutdown(returnCode int) int {
     notifyShutdown()
 
     netShutdown()
@@ -365,20 +368,24 @@ func shutdown() bool {
         err := app.DeletePidFile()
         if err != nil {
             Log().Error("%v\n", err)
-            return false
+            if returnCode == 0 {
+                return 1
+            } else {
+                return returnCode
+            }
         }
     }
 
-    return true
+    return returnCode
 }
 
 // _signalShutdown asynchronously signals the application to shutdown.
-func _signalShutdown() {
+func _signalShutdown(returnCode  int) {
     shuttingDown = true
 
     go func() {
         defer crash.HandleAll()
-        shutdownChan <- true
+        shutdownChan <- returnCode
     }()
 }
 

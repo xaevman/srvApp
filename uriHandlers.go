@@ -100,7 +100,15 @@ func OnLogsUri(resp http.ResponseWriter, req *http.Request) {
 
 // OnPingUri handles requests to the /debug/ping/ uri.
 func OnPingUri(resp http.ResponseWriter, req *http.Request) {
-	resp.WriteHeader(200)
+	srvLog.Debug("Ping request from %s", req.RemoteAddr)
+	c, err := resp.Write([]byte("200 - OK"))
+	if err != nil {
+		srvLog.Error(
+			"Error writing response after %d bytes (%v)",
+			c,
+			err,
+		)
+	}
 }
 
 // OnPrivStaticSrvUri handles static file requests on the private side
@@ -154,7 +162,7 @@ func OnShutdownUri(resp http.ResponseWriter, req *http.Request) {
 		defer crash.HandleAll()
 
 		<-time.After(2 * time.Second)
-		SignalShutdown()
+		SignalShutdown(0)
 	}()
 }
 
