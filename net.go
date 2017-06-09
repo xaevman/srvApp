@@ -616,11 +616,6 @@ func ValidateRequestBody(
 		return fmt.Errorf("Zero length body")
 	}
 
-	bodyLen, err := buffer.ReadFrom(req.Body)
-	if err != nil {
-		return err
-	}
-
 	lenHdrStr, ok := req.Header["Content-Length"]
 	if ok {
 		contentLen, err := strconv.ParseInt(lenHdrStr[0], 10, 64)
@@ -633,6 +628,11 @@ func ValidateRequestBody(
 				)
 			}
 		}
+	}
+
+	bodyLen, err := buffer.ReadFrom(req.Body)
+	if err != nil {
+		return err
 	}
 
 	if bodyLen != req.ContentLength {
@@ -799,9 +799,12 @@ func netInit() {
 		PRIVATE_HANDLER,
 		ACCESS_LEVEL_ADMIN,
 	)
+
+	monInit()
 }
 
 func netShutdown() {
+	monShutdown()
 	geoShutdown()
 	ipsShutdown()
 }

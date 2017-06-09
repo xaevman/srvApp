@@ -15,27 +15,27 @@
 package srvApp
 
 import (
-    "flag"
-    "fmt"
-    "os"
-    "os/signal"
-    "runtime"
-    "sync"
-    // "time"
+	"flag"
+	"fmt"
+	"os"
+	"os/signal"
+	"runtime"
+	"sync"
+	// "time"
 
-    "github.com/xaevman/app"
-    "github.com/xaevman/counters"
-    "github.com/xaevman/crash"
-    "github.com/xaevman/ini"
-    "github.com/xaevman/log"
+	"github.com/xaevman/app"
+	"github.com/xaevman/counters"
+	"github.com/xaevman/crash"
+	"github.com/xaevman/ini"
+	"github.com/xaevman/log"
 )
 
 // RunMode enum
 const (
-    CMDLINE = iota
-    RUN_SVC
-    INST_SVC
-    UNINST_SVC
+	CMDLINE = iota
+	RUN_SVC
+	INST_SVC
+	UNINST_SVC
 )
 
 // RunCfg represents the desired run configuration for the application before
@@ -43,16 +43,16 @@ const (
 // currently be used to force enable/disable the http listeners depending on run
 // mode.
 type RunCfg struct {
-    InitSrvCmd bool
-    InitSrvSvc bool
+	InitSrvCmd bool
+	InitSrvSvc bool
 }
 
 // AppConfig returns a reference to the application's configuration file.
 func AppConfig() *ini.IniCfg {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return appConfig
+	return appConfig
 }
 
 var appConfig *ini.IniCfg
@@ -60,20 +60,20 @@ var appConfig *ini.IniCfg
 // AppCounters returns a reference to the container for this application's
 // performance counters.
 func AppCounters() *counters.List {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return appCounters
+	return appCounters
 }
 
 var appCounters = counters.NewList()
 
 // AppProcess returns a reference to the current process.
 func AppProcess() *os.Process {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return appProcess
+	return appProcess
 }
 
 var appProcess *os.Process
@@ -81,10 +81,10 @@ var appProcess *os.Process
 // CrashDir returns the relative path to the application's crash
 // directory.
 func CrashDir() string {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return crashDir
+	return crashDir
 }
 
 var crashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
@@ -92,95 +92,95 @@ var crashDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "crash")
 // ConfigDir returns the relative path to the application's config
 // directory.
 func ConfigDir() string {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return configDir
+	return configDir
 }
 
 var configDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "config")
 
 // EmailCrashHandler returns the email crash handler for the app.
 func EmailCrashHandler() *crash.EmailHandler {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return emailCrashHandler
+	return emailCrashHandler
 }
 
 var emailCrashHandler *crash.EmailHandler
 
 // FileCrashHandler returns the file crash handler for the app.
 func FileCrashHandler() *crash.FileHandler {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return fileCrashHandler
+	return fileCrashHandler
 }
 
 var fileCrashHandler *crash.FileHandler
 
 // Http returns a refernce to the http sever object for the application.
 func Http() *HttpSrv {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return httpSrv
+	return httpSrv
 }
 
 var httpSrv = NewHttpSrv()
 
 // Log returns a refernce to the SrvLog instance for the application.
 func Log() *SrvLog {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return srvLog
+	return srvLog
 }
 
 var srvLog *SrvLog
 
 // internal log buffer object
 func LogBuffer() *log.LogBuffer {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return logBuffer
+	return logBuffer
 }
 
 var logBuffer *log.LogBuffer
 
 // LogDir returns the relative path to the application's log directory.
 func LogDir() string {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return logDir
+	return logDir
 }
 
 var logDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
 
 // Internal vars.
 var (
-    cleanPid         = true
-    crashChan        = make(chan bool, 0)
-    modeInstallSvc   = false
-    modeRunSvc       = false
-    modeUninstallSvc = false
-    cfgLock          sync.RWMutex
-    runLock          sync.Mutex
-    runMode          byte
-    shutdownChan     = make(chan int, 0)
-    shuttingDown     = false
-    runCfg           *RunCfg
+	cleanPid         = true
+	crashChan        = make(chan bool, 0)
+	modeInstallSvc   = false
+	modeRunSvc       = false
+	modeUninstallSvc = false
+	cfgLock          sync.RWMutex
+	runLock          sync.Mutex
+	runMode          byte
+	shutdownChan     = make(chan int, 0)
+	shuttingDown     = false
+	runCfg           *RunCfg
 )
 
 // Init calls InitCfg to initialize the server appplication with a default configuration.
 func Init() {
-    InitCfg(&RunCfg{
-        InitSrvCmd: true,
-        InitSrvSvc: true,
-    })
+	InitCfg(&RunCfg{
+		InitSrvCmd: true,
+		InitSrvSvc: true,
+	})
 }
 
 // InitCfg Initializations sets up signal
@@ -188,237 +188,237 @@ func Init() {
 // file and email crash handlers, both private and public facing http server
 // listeners, and some default debugging Uri handlers.
 func InitCfg(cfg *RunCfg) {
-    runLock.Lock()
-    defer runLock.Unlock()
+	runLock.Lock()
+	defer runLock.Unlock()
 
-    cfgLock.Lock()
-    defer cfgLock.Unlock()
+	cfgLock.Lock()
+	defer cfgLock.Unlock()
 
-    runCfg = cfg
+	runCfg = cfg
 
-    os.Chdir(app.GetExeDir())
+	os.Chdir(app.GetExeDir())
 
-    parseFlags()
-    initLogs()
+	parseFlags()
+	initLogs()
 
-    afterFlags()
-    if shuttingDown {
-        return
-    }
+	afterFlags()
+	if shuttingDown {
+		return
+	}
 
-    uptime := counters.NewTimer("app.uptime_sec")
-    uptime.Set(0)
-    appCounters.Add(uptime)
+	uptime := counters.NewTimer("app.uptime_sec")
+	uptime.Set(0)
+	appCounters.Add(uptime)
 
-    appConfig = ini.New(fmt.Sprintf("%s/%s.ini", configDir, app.GetName()))
+	appConfig = ini.New(fmt.Sprintf("%s/%s.ini", configDir, app.GetName()))
 
-    fileCrashHandler = new(crash.FileHandler)
-    fileCrashHandler.SetCrashDir(crashDir)
-    crash.AddHandler(fileCrashHandler)
+	fileCrashHandler = new(crash.FileHandler)
+	fileCrashHandler.SetCrashDir(crashDir)
+	crash.AddHandler(fileCrashHandler)
 
-    emailCrashHandler = crash.NewEmailHandler()
-    crash.AddHandler(emailCrashHandler)
+	emailCrashHandler = crash.NewEmailHandler()
+	crash.AddHandler(emailCrashHandler)
 
-    catchSigInt()
-    catchCrash()
-    netInit()
+	catchSigInt()
+	catchCrash()
+	netInit()
 
-    ini.Subscribe(appConfig, onCfgChange)
+	ini.Subscribe(appConfig, onCfgChange)
 }
 
 // QueryRunmode returns the configured runmode for the application
 func QueryRunmode() byte {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return runMode
+	return runMode
 }
 
 // QueryShutdown returns a boolean values indicating whether or not
 // the application is shutting down
 func QueryShutdown() bool {
-    cfgLock.RLock()
-    defer cfgLock.RUnlock()
+	cfgLock.RLock()
+	defer cfgLock.RUnlock()
 
-    return shuttingDown
+	return shuttingDown
 }
 
 // Run executes the application in whatever run mode is configured.
 func Run() int {
-    runLock.Lock()
-    defer runLock.Unlock()
+	runLock.Lock()
+	defer runLock.Unlock()
 
-    return run()
+	return run()
 }
 
 // SignalShutdown ensures a config lock before calling
 // the unsafe _signalShutdown
 func SignalShutdown(returnCode int) {
-    cfgLock.Lock()
-    defer cfgLock.Unlock()
+	cfgLock.Lock()
+	defer cfgLock.Unlock()
 
-    _signalShutdown(returnCode)
+	_signalShutdown(returnCode)
 }
 
 // blockUntilShutdown does exactly what it sounds like, it blocks until
 // the shutdown signal is received, then calls Shutdown.
 func blockUntilShutdown() int {
-    returnCode := <-shutdownChan
-    returnCode = shutdown(returnCode)
+	returnCode := <-shutdownChan
+	returnCode = shutdown(returnCode)
 
-    // TODO: do this and kill ourselves after a timeout!
-    // for count := runtime.NumGoroutine(); count > 1; {
-    //     fmt.Printf("%d goroutines still running...\n", count)
-    //     <-time.After(1 * time.Second)
-    // }
+	// TODO: do this and kill ourselves after a timeout!
+	// for count := runtime.NumGoroutine(); count > 1; {
+	//     fmt.Printf("%d goroutines still running...\n", count)
+	//     <-time.After(1 * time.Second)
+	// }
 
-    return returnCode
+	return returnCode
 }
 
 // catchCrash catches the user-initiated crash signal and happily panics
 // the application.
 func catchCrash() {
-    go func() {
-        defer crash.HandleAll()
+	go func() {
+		defer crash.HandleAll()
 
-        select {
-        case <-crashChan:
-            if shuttingDown {
-                return
-            }
+		select {
+		case <-crashChan:
+			if shuttingDown {
+				return
+			}
 
-            panic("User initiated crash")
-        }
-    }()
+			panic("User initiated crash")
+		}
+	}()
 }
 
 // catchSigInt catches the SIGINT signal and, in turn, signals the applciation
 // to start a graceful shutdown.
 func catchSigInt() {
-    c := make(chan os.Signal, 1)
-    signal.Notify(c, os.Interrupt)
-    go func() {
-        defer crash.HandleAll()
+	c := make(chan os.Signal, 1)
+	signal.Notify(c, os.Interrupt)
+	go func() {
+		defer crash.HandleAll()
 
-        select {
-        case <-c:
-            SignalShutdown(0)
-        }
-    }()
+		select {
+		case <-c:
+			SignalShutdown(0)
+		}
+	}()
 }
 
 // parseFlags registers and parses default command line flags, then
 // sets the default run mode for the application.
 func parseFlags() {
-    // windows-specific options
-    if runtime.GOOS == "windows" {
-        flag.BoolVar(
-            &modeRunSvc,
-            "runSvc",
-            false,
-            "Run the application as a windows service.",
-        )
+	// windows-specific options
+	if runtime.GOOS == "windows" {
+		flag.BoolVar(
+			&modeRunSvc,
+			"runSvc",
+			false,
+			"Run the application as a windows service.",
+		)
 
-        flag.BoolVar(
-            &modeInstallSvc,
-            "install",
-            false,
-            "Install the application as a windows service.",
-        )
+		flag.BoolVar(
+			&modeInstallSvc,
+			"install",
+			false,
+			"Install the application as a windows service.",
+		)
 
-        flag.BoolVar(
-            &modeUninstallSvc,
-            "uninstall",
-            false,
-            "Uninstall the application's service instance.",
-        )
-    }
+		flag.BoolVar(
+			&modeUninstallSvc,
+			"uninstall",
+			false,
+			"Uninstall the application's service instance.",
+		)
+	}
 
-    flag.Parse()
+	flag.Parse()
 
-    setRunMode()
+	setRunMode()
 }
 
 // setRunMode stores the run mode for the application.
 func setRunMode() {
-    if modeRunSvc {
-        runMode = RUN_SVC
-    } else if modeInstallSvc {
-        runMode = INST_SVC
-    } else if modeUninstallSvc {
-        runMode = UNINST_SVC
-    } else {
-        runMode = CMDLINE
-    }
+	if modeRunSvc {
+		runMode = RUN_SVC
+	} else if modeInstallSvc {
+		runMode = INST_SVC
+	} else if modeUninstallSvc {
+		runMode = UNINST_SVC
+	} else {
+		runMode = CMDLINE
+	}
 }
 
 // shutdown handles shutting down the server process, closing open logs,
 // and terminating subprocesses.
 func shutdown(returnCode int) int {
-    notifyShutdown()
+	notifyShutdown()
 
-    netShutdown()
+	netShutdown()
 
-    Log().Close()
+	Log().Close()
 
-    close(shutdownChan)
-    close(crashChan)
+	close(shutdownChan)
+	close(crashChan)
 
-    if cleanPid {
-        err := app.DeletePidFile()
-        if err != nil {
-            Log().Error("%v\n", err)
-            if returnCode == 0 {
-                return 1
-            } else {
-                return returnCode
-            }
-        }
-    }
+	if cleanPid {
+		err := app.DeletePidFile()
+		if err != nil {
+			Log().Error("%v\n", err)
+			if returnCode == 0 {
+				return 1
+			} else {
+				return returnCode
+			}
+		}
+	}
 
-    return returnCode
+	return returnCode
 }
 
 // _signalShutdown asynchronously signals the application to shutdown.
-func _signalShutdown(returnCode  int) {
-    shuttingDown = true
+func _signalShutdown(returnCode int) {
+	shuttingDown = true
 
-    go func() {
-        defer crash.HandleAll()
-        shutdownChan <- returnCode
-    }()
+	go func() {
+		defer crash.HandleAll()
+		shutdownChan <- returnCode
+	}()
 }
 
 // startSingleton intializes the server process, attempting to make sure
 // that it is the only such process running.
 func startSingleton() bool {
-    cfgLock.Lock()
-    defer cfgLock.Unlock()
+	cfgLock.Lock()
+	defer cfgLock.Unlock()
 
-    appProcess = app.GetRunStatus()
+	appProcess = app.GetRunStatus()
 
-    if appProcess != nil {
-        srvLog.Error(
-            "Application already running under PID %d\n",
-            appProcess.Pid,
-        )
+	if appProcess != nil {
+		srvLog.Error(
+			"Application already running under PID %d\n",
+			appProcess.Pid,
+		)
 
-        cleanPid = false
-        return false
-    }
+		cleanPid = false
+		return false
+	}
 
-    _, err := app.CreatePidFile()
-    if err != nil {
-        srvLog.Error("Error creating PID file (%s)", err)
-        return false
-    }
+	_, err := app.CreatePidFile()
+	if err != nil {
+		srvLog.Error("Error creating PID file (%s)", err)
+		return false
+	}
 
-    appProcess = app.GetRunStatus()
+	appProcess = app.GetRunStatus()
 
-    if appProcess == nil {
-        srvLog.Error("Error finding our process")
-        return false
-    }
+	if appProcess == nil {
+		srvLog.Error("Error finding our process")
+		return false
+	}
 
-    return true
+	return true
 }
