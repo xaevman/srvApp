@@ -1,20 +1,48 @@
 package srvApp
 
 import (
-	"bytes"
-	"compress/zlib"
 	gjson "encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"net/http"
-	"os"
 	"sync"
 
 	"github.com/xaevman/ini"
-	"github.com/xaevman/json"
 )
 
 const GEO_DATA_FILE = "geo.dat"
+
+type GeoIpData struct {
+	Country     string  `json:"country_name"`
+	CountryCode string  `json:"country_code"`
+	Region      string  `json:"region_name"`
+	City        string  `json:"city"`
+	ZipCode     string  `json:"zip_code"`
+	Lat         float32 `json:"latitude"`
+	Long        float32 `json:"longitude"`
+}
+
+var (
+	geoDataLocal = &GeoIpData{
+		Country:     "RFC1918",
+		CountryCode: "RF",
+		Region:      "RFC1918",
+		City:        "RFC1918",
+		ZipCode:     "RFC1918",
+		Lat:         0,
+		Long:        0,
+	}
+
+	geoDataUnknown = &GeoIpData{
+		Country:     "Unknown",
+		CountryCode: "UU",
+		Region:      "Unknown",
+		City:        "Unknown",
+		ZipCode:     "Unknown",
+		Lat:         0,
+		Long:        0,
+	}
+)
 
 // geo module config synchronization
 var (
@@ -24,76 +52,16 @@ var (
 )
 
 var (
-	geoCountryMap   map[string]string
+	geoDataMap      = make(map[string]*GeoIpData)
 	geoCountryPerms map[string]bool
 )
 
 func geoInit() {
 	defer ini.Subscribe(appConfig, geoOnConfigChange)
-
-	geoCfgLock.Lock()
-	defer geoCfgLock.Unlock()
-
-	f, err := os.Open(GEO_DATA_FILE)
-	if err != nil {
-		geoCountryMap = make(map[string]string)
-		srvLog.Error("geoInit error: %v", err)
-		return
-	}
-	defer f.Close()
-
-	var buffer bytes.Buffer
-
-	cmpReader, err := zlib.NewReader(f)
-	if err != nil {
-		geoCountryMap = make(map[string]string)
-		srvLog.Error("geoInit error: %v", err)
-		return
-	}
-	defer cmpReader.Close()
-
-	buffer.ReadFrom(cmpReader)
-
-	err = gjson.Unmarshal(buffer.Bytes(), &geoCountryMap)
-	if err != nil {
-		geoCountryMap = make(map[string]string)
-		srvLog.Error("geoInit error: %v", err)
-		return
-	}
-
-	srvLog.Info(
-		"GeoIP data loaded from disk (%d entries)",
-		len(geoCountryMap),
-	)
 }
 
 func geoShutdown() {
-	geoCfgLock.RLock()
-	defer geoCfgLock.RUnlock()
 
-	srvLog.Info(
-		"Saving geo ip tables (%d entries)",
-		len(geoCountryMap),
-	)
-
-	f, err := os.Create(GEO_DATA_FILE)
-	if err != nil {
-		srvLog.Error("geoShutdown error: %v", err)
-		return
-	}
-	defer f.Close()
-
-	data, err := gjson.Marshal(geoCountryMap)
-	if err != nil {
-		srvLog.Error("geoShutdown error: %v", err)
-		return
-	}
-
-	bReader := bytes.NewReader(data)
-	cmpWriter := zlib.NewWriter(f)
-	defer cmpWriter.Close()
-
-	io.Copy(cmpWriter, bReader)
 }
 
 func geoOnConfigChange(cfg *ini.IniCfg, changeCount int) {
@@ -138,80 +106,62 @@ func geoGetEnabled() bool {
 	return geoSecEnabled
 }
 
+func geoResolveAddr(host string) *GeoIpData {
+	// if it's an RFC1918 network there's no need
+	// to do anything fancy
+	if httpSrv.IsPrivateNetwork(host) {
+		return geoDataLocal
+	}
+
+	// see if we have the answer cached already
+	geoCfgLock.RLock()
+	geoData, ok := geoDataMap[host]
+	geoCfgLock.RUnlock()
+	if ok {
+		return geoData
+	}
+
+	// nope, let's request it
+	uri := fmt.Sprintf("%s/%s", geoGetServiceUri(), host)
+	resp, err := http.Get(uri)
+	if err != nil {
+		return geoDataUnknown
+	}
+	defer resp.Body.Close()
+
+	rawData, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return geoDataUnknown
+	}
+
+	var newGeo GeoIpData
+
+	err = gjson.Unmarshal(rawData, &newGeo)
+	if err != nil {
+		return geoDataUnknown
+	}
+
+	geoCfgLock.Lock()
+	geoDataMap[host] = &newGeo
+	geoCfgLock.Unlock()
+
+	return &newGeo
+}
+
 func geoAuthorizeHost(host string) (string, bool) {
 	if !geoGetEnabled() {
 		return "", true
 	}
 
-	var allowed bool
-	var country string
-	var ok bool
+	geoData := geoResolveAddr(host)
 
 	geoCfgLock.RLock()
-	country, ok = geoCountryMap[host]
+	allowed, ok := geoCountryPerms[geoData.Country]
 	geoCfgLock.RUnlock()
 
 	if !ok {
-		tmp := geoQueryCountry(host)
-
-		geoCfgLock.Lock()
-		country, ok = geoCountryMap[host]
-		if !ok {
-			geoCountryMap[host] = tmp
-			country = tmp
-
-		}
-		geoCfgLock.Unlock()
+		allowed = false
 	}
 
-	geoCfgLock.RLock()
-	allowed, ok = geoCountryPerms[country]
-	geoCfgLock.RUnlock()
-
-	if !ok {
-		geoCfgLock.Lock()
-		allowed, ok = geoCountryPerms[country]
-		if !ok {
-			geoCountryPerms[country] = false
-			allowed = false
-		}
-		geoCfgLock.Unlock()
-
-		return country, false
-	}
-
-	return country, allowed
-}
-
-func geoQueryCountry(host string) string {
-	if httpSrv.IsPrivateNetwork(host) {
-		return "local"
-	}
-
-	svcUri := geoGetServiceUri()
-	geoRequest := fmt.Sprintf("%s/%s", svcUri, host)
-	resp, err := http.Get(geoRequest)
-
-	if err != nil {
-		srvLog.Error("Geo IP country lookup failure: %s (%v)", host, err)
-		return "serviceQueryFailure"
-	}
-
-	defer resp.Body.Close()
-
-	var buffer bytes.Buffer
-	buffer.ReadFrom(resp.Body)
-
-	j, err := json.Parse(buffer.Bytes())
-	if err != nil {
-		return "serviceQueryFailure"
-	}
-
-	country := json.Search(j, "country_code").Value().(string)
-
-	if country == "" {
-		country = "serviceQueryFailure::empty"
-	}
-
-	return country
+	return geoData.Country, allowed
 }

@@ -13,7 +13,9 @@
 package srvApp
 
 import (
+	"github.com/xaevman/app"
 	"github.com/xaevman/crash"
+	"github.com/xaevman/log"
 
 	"bufio"
 	"encoding/json"
@@ -26,10 +28,25 @@ import (
 	"time"
 )
 
+type AppInfo struct {
+	Name    string
+	NetInfo *NetInfo
+}
+
+func getAppInfo() *AppInfo {
+	return &AppInfo{
+		Name:    app.GetName(),
+		NetInfo: httpSrv.getNetInfo(),
+	}
+}
+
+func getAppInfoJSON() ([]byte, error) {
+	return json.MarshalIndent(getAppInfo(), "", "    ")
+}
+
 // OnAppInfoUri handles requests to the /debug/appinfo/ uri.
 func OnAppInfoUri(resp http.ResponseWriter, req *http.Request) {
-	handlers := httpSrv.getNetInfo()
-	data, err := json.MarshalIndent(&handlers, "", "    ")
+	data, err := getAppInfoJSON()
 	if err != nil {
 		srvLog.Error("OnAppInfoUri :: %v", err)
 		http.Error(
@@ -44,8 +61,12 @@ func OnAppInfoUri(resp http.ResponseWriter, req *http.Request) {
 }
 
 // OnCountersUri handles requests to the /debug/counters/ uri.
+func getCountersJSON() ([]byte, error) {
+	return json.MarshalIndent(AppCounters(), "", "    ")
+}
+
 func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
-	data, err := json.MarshalIndent(AppCounters(), "", "    ")
+	data, err := getCountersJSON()
 	if err != nil {
 		srvLog.Error("OnAppInfoUri :: %v", err)
 		http.Error(
@@ -83,8 +104,16 @@ func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
 }
 
 // OnLogsUri handles requests to the /debug/logs/ uri.
+func getLogBuffer() []*log.LogMsg {
+	return logBuffer.ReadAll()
+}
+
+func getLogsJSON() ([]byte, error) {
+	return json.MarshalIndent(logBuffer, "", "    ")
+}
+
 func OnLogsUri(resp http.ResponseWriter, req *http.Request) {
-	data, err := json.MarshalIndent(logBuffer, "", "    ")
+	data, err := getLogsJSON()
 	if err != nil {
 		srvLog.Error("OnLogsUri :: %v", err)
 		http.Error(

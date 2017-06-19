@@ -15,19 +15,22 @@
 package srvApp
 
 import (
+	"bytes"
 	"flag"
 	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/pprof"
 	"sync"
-	// "time"
 
 	"github.com/xaevman/app"
 	"github.com/xaevman/counters"
 	"github.com/xaevman/crash"
 	"github.com/xaevman/ini"
 	"github.com/xaevman/log"
+	"github.com/xaevman/shutdown"
+	_ "github.com/xaevman/trace"
 )
 
 // RunMode enum
@@ -37,6 +40,9 @@ const (
 	INST_SVC
 	UNINST_SVC
 )
+
+// coutner names
+const APP_UPTIME_COUNTER = "app.uptime_sec"
 
 // RunCfg represents the desired run configuration for the application before
 // ini or command line flag based options are taken into consideration. This can
@@ -164,13 +170,14 @@ var logDir = fmt.Sprintf("%s/%s", app.GetExeDir(), "log")
 var (
 	cleanPid         = true
 	crashChan        = make(chan bool, 0)
+	exitCode         = 0
 	modeInstallSvc   = false
 	modeRunSvc       = false
 	modeUninstallSvc = false
 	cfgLock          sync.RWMutex
 	runLock          sync.Mutex
 	runMode          byte
-	shutdownChan     = make(chan int, 0)
+	appShutdown      = shutdown.New()
 	shuttingDown     = false
 	runCfg           *RunCfg
 )
@@ -206,7 +213,7 @@ func InitCfg(cfg *RunCfg) {
 		return
 	}
 
-	uptime := counters.NewTimer("app.uptime_sec")
+	uptime := counters.NewTimer(APP_UPTIME_COUNTER)
 	uptime.Set(0)
 	appCounters.Add(uptime)
 
@@ -263,16 +270,19 @@ func SignalShutdown(returnCode int) {
 // blockUntilShutdown does exactly what it sounds like, it blocks until
 // the shutdown signal is received, then calls Shutdown.
 func blockUntilShutdown() int {
-	returnCode := <-shutdownChan
-	returnCode = shutdown(returnCode)
+	<-appShutdown.Signal
 
-	// TODO: do this and kill ourselves after a timeout!
-	// for count := runtime.NumGoroutine(); count > 1; {
-	//     fmt.Printf("%d goroutines still running...\n", count)
-	//     <-time.After(1 * time.Second)
-	// }
+	_shutdown()
 
-	return returnCode
+	appShutdown.Complete()
+	if appShutdown.WaitForTimeout() {
+		var buffer bytes.Buffer
+		pprof.Lookup("goroutine").WriteTo(&buffer, 1)
+
+		panic(fmt.Sprintf("Timeout shutting down srvApp\n\n%s", buffer.String()))
+	}
+
+	return exitCode
 }
 
 // catchCrash catches the user-initiated crash signal and happily panics
@@ -302,7 +312,10 @@ func catchSigInt() {
 
 		select {
 		case <-c:
-			SignalShutdown(0)
+			go func() {
+				defer crash.HandleAll()
+				_signalShutdown(0)
+			}()
 		}
 	}()
 }
@@ -354,39 +367,30 @@ func setRunMode() {
 
 // shutdown handles shutting down the server process, closing open logs,
 // and terminating subprocesses.
-func shutdown(returnCode int) int {
+func _shutdown() {
 	notifyShutdown()
 
 	netShutdown()
+	ini.Shutdown()
 
-	Log().Close()
-
-	close(shutdownChan)
 	close(crashChan)
 
 	if cleanPid {
 		err := app.DeletePidFile()
 		if err != nil {
 			Log().Error("%v\n", err)
-			if returnCode == 0 {
-				return 1
-			} else {
-				return returnCode
-			}
 		}
 	}
 
-	return returnCode
+	Log().Close()
 }
 
 // _signalShutdown asynchronously signals the application to shutdown.
 func _signalShutdown(returnCode int) {
 	shuttingDown = true
+	exitCode = returnCode
 
-	go func() {
-		defer crash.HandleAll()
-		shutdownChan <- returnCode
-	}()
+	appShutdown.Start()
 }
 
 // startSingleton intializes the server process, attempting to make sure

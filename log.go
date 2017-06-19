@@ -13,8 +13,10 @@
 package srvApp
 
 import (
+	"github.com/xaevman/crash"
 	"github.com/xaevman/log"
 	"github.com/xaevman/log/flog"
+	"github.com/xaevman/trace"
 
 	"sync"
 )
@@ -36,9 +38,11 @@ func NewSrvLog() *SrvLog {
 	obj.AddLog("error", logBuffer)
 	obj.AddLog("info", logBuffer)
 
-	obj.AddLog("debug", flog.New("debug", logDir, flog.BufferedFile))
-	obj.AddLog("error", flog.New("error", logDir, flog.DirectFile))
-	obj.AddLog("info", flog.New("info", logDir, flog.BufferedFile))
+	fileLog := flog.New("all", logDir, flog.BufferedFile)
+
+	obj.AddLog("debug", fileLog)
+	obj.AddLog("error", fileLog)
+	obj.AddLog("info", fileLog)
 
 	return obj
 }
@@ -74,25 +78,50 @@ func (this *SrvLog) Close() {
 // Debug is a proxy which passes its arguments along to the underlying
 // debug flog instance.
 func (this *SrvLog) Debug(format string, v ...interface{}) {
-	this.LogTo("debug", format, v...)
+	this.LogTo(false, "debug", format, v...)
 }
 
 // Error is a proxy which passes its arguments along to the underlying
 // error flog instance.
 func (this *SrvLog) Error(format string, v ...interface{}) {
-	this.LogTo("error", format, v...)
+	this.LogTo(false, "error", format, v...)
 }
 
 // Info is a proxy which passes its arguments along to the underlying
 // info flog instance.
 func (this *SrvLog) Info(format string, v ...interface{}) {
-	this.LogTo("info", format, v...)
+	this.LogTo(false, "info", format, v...)
+}
+
+// Debug is a proxy which passes its arguments along to the underlying
+// debug flog instance.
+func (this *SrvLog) DebugLocal(format string, v ...interface{}) {
+	this.LogTo(true, "debug", format, v...)
+}
+
+// Error is a proxy which passes its arguments along to the underlying
+// error flog instance.
+func (this *SrvLog) ErrorLocal(format string, v ...interface{}) {
+	this.LogTo(true, "error", format, v...)
+}
+
+// Info is a proxy which passes its arguments along to the underlying
+// info flog instance.
+func (this *SrvLog) InfoLocal(format string, v ...interface{}) {
+	this.LogTo(true, "info", format, v...)
 }
 
 // LogTo logs to the registered loggers with the specified key, using
 // the supplied formatting string and arguments.
-func (this *SrvLog) LogTo(name, format string, v ...interface{}) {
+func (this *SrvLog) LogTo(local bool, name, format string, v ...interface{}) {
 	msg := log.NewLogMsg(name, format, 3, v...)
+
+	if !local {
+		go func() {
+			defer crash.HandleAll()
+			monSendLogUpdate(msg)
+		}()
+	}
 
 	this.lock.RLock()
 	defer this.lock.RUnlock()
@@ -158,4 +187,7 @@ func (this *SrvLog) SetLogsEnabled(name string, val bool) {
 func initLogs() {
 	logBuffer = log.NewLogBuffer(DefaultHttpLogBuffers)
 	srvLog = NewSrvLog()
+
+	trace.DebugLogger = srvLog
+	trace.ErrorLogger = srvLog
 }

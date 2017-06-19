@@ -1,13 +1,14 @@
 package srvApp
 
 import (
+	"container/ring"
 	"encoding/json"
 	"net/http"
 	"sync"
 	"time"
 
 	"github.com/xaevman/crash"
-	"github.com/xaevman/ini"
+	"github.com/xaevman/shutdown"
 )
 
 // REQ_STATUS enumeration
@@ -21,43 +22,24 @@ const (
 
 // module data
 var (
-	ipsLock         sync.RWMutex
-	ipsShutdownChan = make(chan bool, 0)
-	ipsStats        = make(map[string]*IPStatus)
+	ipsLock      sync.RWMutex
+	ipsBuffer    = ring.New(1000)
+	ipsEvents    = make(chan *RequestLog, 0)
+	_ipsShutdown = shutdown.New()
 )
 
-// default config vaules
-const (
-	ipsDefaultReaperFreqMin = 30
-	ipsDefaultMaxReqAgeHrs  = 24
-)
-
-// ips config synchronization
-var (
-	ipsCfgLock       sync.RWMutex
-	ipsReaperFreqMin float64
-	ipsMaxReqAgeHrs  float64
-)
-
-type IPStatus struct {
-	Count    uint64
-	ErrCount uint64
-	Host     string
-	Requests []*ReqStatus
-	StatLock sync.Mutex `json:"-"`
-}
-
-type ReqStatus struct {
-	AccessLevel int
+type RequestLog struct {
+	Host        string
 	Path        string
 	Pattern     string
 	Status      int
+	AccessLevel int
 	Timestamp   time.Time
+	GeoData     *GeoIpData
 }
 
 func ipsInit() {
-	ini.Subscribe(appConfig, ipsOnConfigChange)
-	go ipsRunReaper()
+	srvLog.Info("ips Init")
 
 	httpSrv.RegisterHandler(
 		"/debug/ipstats/",
@@ -65,138 +47,99 @@ func ipsInit() {
 		PRIVATE_HANDLER,
 		ACCESS_LEVEL_ADMIN,
 	)
-}
 
-func ipsShutdown() {
-	ipsShutdownChan <- true
-}
+	go func() {
+		defer crash.HandleAll()
+		defer _ipsShutdown.Complete()
 
-func ipsOnConfigChange(cfg *ini.IniCfg, changeCount int) {
-	ipsCfgLock.Lock()
-	defer ipsCfgLock.Unlock()
+		for {
+			select {
+			case <-_ipsShutdown.Signal:
+				return
+			case data, more := <-ipsEvents:
+				if !more {
+					return
+				}
 
-	srvLog.Info("ipsOnConfigChange")
+				data.GeoData = geoResolveAddr(data.Host)
 
-	section := cfg.GetSection("net")
+				func() {
+					ipsLock.Lock()
+					defer ipsLock.Unlock()
 
-	val := section.GetFirstVal("IpStatsReaperFreqMin")
-	ipsReaperFreqMin = val.GetValFloat64(0, ipsDefaultReaperFreqMin)
-	srvLog.Info("IpStatsReaperFreqMin: %.2f", ipsReaperFreqMin)
+					ipsBuffer.Value = data
+					ipsBuffer.Next()
+				}()
 
-	val = section.GetFirstVal("IPStatsMaxRequestAgeHrs")
-	ipsMaxReqAgeHrs = val.GetValFloat64(0, ipsDefaultMaxReqAgeHrs)
-	srvLog.Info("IPStatsMaxRequestAgeHrs: %.2f", ipsMaxReqAgeHrs)
-}
-
-func ipsRunReaper() {
-	for {
-		freqMin := time.Duration(ipsGetReaperFreqMin())
-
-		select {
-		case <-ipsShutdownChan:
-			return
-		case <-time.After(freqMin * time.Minute):
-			ipsPurgeOldStats()
+				monSendIpsUpdate(data)
+			}
 		}
-	}
-}
-
-func ipsGetReaperFreqMin() float64 {
-	ipsCfgLock.RLock()
-	defer ipsCfgLock.RUnlock()
-
-	return ipsReaperFreqMin
-}
-
-func ipsGetMaxReqAgeHrs() float64 {
-	ipsCfgLock.RLock()
-	defer ipsCfgLock.RUnlock()
-
-	return ipsMaxReqAgeHrs
+	}()
 }
 
 func ipsOnUri(resp http.ResponseWriter, req *http.Request) {
 	defer crash.HandleAll()
 
-	ipsLock.RLock()
-	defer ipsLock.RUnlock()
-
-	body, err := json.MarshalIndent(ipsStats, "", "    ")
+	js, err := ipsGetBufferJSON()
 	if err != nil {
-		http.Error(resp, "StatusInternalServerError", http.StatusInternalServerError)
-		srvLog.Error("ipsOnUri error: %v", err)
+		srvLog.Error("Error parsing buffer: %v", err)
+		http.Error(resp, "Error parsing buffer", http.StatusInternalServerError)
 		return
 	}
 
-	resp.Write(body)
+	resp.Write(js)
 }
 
-func ipsPurgeOldStats() {
-	ipsLock.Lock()
-	defer ipsLock.Unlock()
-
-	maxReqAgeHrs := ipsGetMaxReqAgeHrs()
-	purgeCount := 0
-
-	for k := range ipsStats {
-		ipsStats[k].StatLock.Lock()
-		defer ipsStats[k].StatLock.Unlock()
-
-		for i := len(ipsStats[k].Requests) - 1; i > -1; i-- {
-			dt := time.Since(ipsStats[k].Requests[i].Timestamp)
-			if dt.Hours() > maxReqAgeHrs {
-				ipsStats[k].Requests = append(
-					ipsStats[k].Requests[:i],
-					ipsStats[k].Requests[i+1:]...,
-				)
-				purgeCount++
-			}
-		}
+func ipsShutdown() {
+	srvLog.Info("ips Shutdown")
+	_ipsShutdown.Start()
+	if _ipsShutdown.WaitForTimeout() {
+		srvLog.Error("Shutdown timeout")
 	}
+}
 
-	srvLog.Info("Purged %d old IPStat entries", purgeCount)
+func ipsGetBuffer() []*RequestLog {
+	tmp := make([]*RequestLog, 0, ipsBuffer.Len())
+
+	func() {
+		ipsLock.RLock()
+		defer ipsLock.RUnlock()
+
+		ipsBuffer.Do(func(item interface{}) {
+			if item == nil {
+				return
+			}
+
+			tmp = append(tmp, item.(*RequestLog))
+		})
+	}()
+
+	return tmp
+}
+
+func ipsGetBufferJSON() ([]byte, error) {
+	tmp := ipsGetBuffer()
+	return json.Marshal(tmp)
 }
 
 func ipsLogStats(host string, uri, pattern string, access, status int) {
-	var hostStats *IPStatus
-	var ok bool
-
-	ipsLock.RLock()
-	hostStats, ok = ipsStats[host]
-	ipsLock.RUnlock()
-
-	if !ok {
-		tmp := &IPStatus{
-			Count:    0,
-			ErrCount: 0,
-			Host:     host,
-			Requests: make([]*ReqStatus, 0, 10),
-		}
-
-		ipsLock.Lock()
-		hostStats, ok = ipsStats[host]
-		if !ok {
-			ipsStats[host] = tmp
-			hostStats = tmp
-		}
-		ipsLock.Unlock()
-	}
-
-	hostStats.StatLock.Lock()
-	defer hostStats.StatLock.Unlock()
-
-	hostStats.Count++
-	if status > 0 {
-		hostStats.ErrCount++
-	}
-
-	reqStats := &ReqStatus{
-		AccessLevel: access,
+	newLog := &RequestLog{
+		Host:        host,
 		Path:        uri,
 		Pattern:     pattern,
 		Status:      status,
+		AccessLevel: access,
 		Timestamp:   time.Now(),
 	}
 
-	hostStats.Requests = append(hostStats.Requests, reqStats)
+	go func() {
+		defer crash.HandleAll()
+
+		select {
+		case <-_ipsShutdown.Signal:
+		case ipsEvents <- newLog:
+		case <-time.After(2 * time.Second):
+			srvLog.Error("Timeout queueing ips stats data")
+		}
+	}()
 }

@@ -62,9 +62,9 @@ func (this *appSvc) Execute(
 
 	for !shuttingDown {
 		select {
-		case resultCode := <-shutdownChan:
+		case <-appShutdown.Signal:
 			Log().Debug("Service shutdown signal received")
-			shutdown(resultCode)
+			continue
 		case c := <-r:
 			switch c.Cmd {
 			case svc.Interrogate:

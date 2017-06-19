@@ -35,13 +35,8 @@ func onCfgChange(cfg *ini.IniCfg, changeCount int) {
 // cfgLogs configures logging options when the application config changes.
 func cfgLogs(cfg *ini.IniCfg) {
 	sec := cfg.GetSection("app")
-	val := sec.GetFirstVal("HttpLogBuffers")
-	iVal := val.GetValInt(0, DefaultHttpLogBuffers)
-	srvLog.Info("HttpLogBuffers: %d", iVal)
 
-	logBuffer.SetMaxSize(iVal)
-
-	val = sec.GetFirstVal("DebugLogs")
+	val := sec.GetFirstVal("DebugLogs")
 	bVal := val.GetValBool(0, false)
 	srvLog.Info("Debug logs enabled: %t", bVal)
 	srvLog.SetLogsEnabled("debug", bVal)
@@ -242,4 +237,14 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 		certMap,
 		forceRestart,
 	)
+
+	netId = cfg.ConfigVer
+	srvLog.Info("NetId: %s", netId)
+
+	if changeCount == 0 {
+		go func() {
+			defer crash.HandleAll()
+			monInit()
+		}()
+	}
 }

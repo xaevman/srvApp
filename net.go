@@ -30,6 +30,16 @@ import (
 	"time"
 )
 
+type SubnetInfo struct {
+	Servers  []string
+	Handlers []string
+}
+
+type NetInfo struct {
+	Private *SubnetInfo
+	Public  *SubnetInfo
+}
+
 // HandlerType enumeration.
 const (
 	PRIVATE_HANDLER = iota
@@ -42,6 +52,11 @@ var (
 	netCfgLock sync.RWMutex
 )
 
+// synchronization around netid
+var (
+	netId string
+)
+
 // privateNets returns a list of private, reserved, network segments.
 func PrivateNets() []*net.IPNet {
 	return privateNets
@@ -52,10 +67,16 @@ var privateNets []*net.IPNet
 // localAddrs returns a list of addresses local to the machine the
 // application is running on.
 func LocalAddrs() []*net.IP {
+	localAddrsLock.RLock()
+	defer localAddrsLock.RUnlock()
+
 	return localAddrs
 }
 
-var localAddrs []*net.IP
+var (
+	localAddrsLock sync.RWMutex
+	localAddrs     []*net.IP
+)
 
 type Conn struct {
 	net.Conn
@@ -79,7 +100,9 @@ func (this *srvAppListener) Addr() net.Addr {
 func (this *srvAppListener) Accept() (net.Conn, error) {
 	c, err := this.listener.Accept()
 	if err != nil {
-		srvLog.Error("%s", err)
+		if !this.isClosing() {
+			srvLog.Error("%s", err)
+		}
 		return nil, err
 	}
 
@@ -93,6 +116,10 @@ func (this *srvAppListener) Accept() (net.Conn, error) {
 }
 
 func (this *srvAppListener) Close() error {
+	if this.isClosing() {
+		return nil
+	}
+
 	atomic.StoreInt32(&this.closing, 1)
 	err := this.listener.Close()
 	if err != nil {
@@ -285,45 +312,77 @@ func (this *HttpSrv) configureTLS(certMap map[string]*tls.Certificate, tlsRedire
 	}
 }
 
-func (this *HttpSrv) getNetInfo() map[string]map[string][]string {
+func (this *HttpSrv) GetSrvAddrs() []string {
+	result := make([]string, 0)
+
 	this.configLock.RLock()
 	defer this.configLock.RUnlock()
 
-	privHandlers := make([]string, 0, len(this.privateHandlers))
-	privServers := make([]string, 0, len(this.privateListeners))
-	pubHandlers := make([]string, 0, len(this.publicHandlers))
-	pubServers := make([]string, 0, len(this.publicListeners))
+	for k, _ := range this.privateListeners {
+		if len(k) > 0 {
+			result = append(result, k)
+		}
+	}
+
+	for k, _ := range this.publicListeners {
+		if len(k) > 0 {
+			result = append(result, k)
+		}
+	}
+
+	return result
+}
+
+func (this *HttpSrv) getNetInfo() *NetInfo {
+	this.configLock.RLock()
+	defer this.configLock.RUnlock()
+
+	net := &NetInfo{
+		Private: &SubnetInfo{
+			Servers:  make([]string, 0, len(this.privateListeners)),
+			Handlers: make([]string, 0, len(this.privateHandlers)),
+		},
+		Public: &SubnetInfo{
+			Servers:  make([]string, 0, len(this.publicListeners)),
+			Handlers: make([]string, 0, len(this.publicHandlers)),
+		},
+	}
 
 	for k := range this.privateHandlers {
-		privHandlers = append(privHandlers, k)
+		net.Private.Handlers = append(net.Private.Handlers, k)
 	}
-	sort.Strings(privHandlers)
+	sort.Strings(net.Private.Handlers)
 
 	for k := range this.privateListeners {
-		privServers = append(privServers, k)
+		net.Private.Servers = append(net.Private.Servers, k)
 	}
-	sort.Strings(privServers)
+	sort.Strings(net.Private.Servers)
 
 	for k := range this.publicHandlers {
-		pubHandlers = append(pubHandlers, k)
+		net.Public.Handlers = append(net.Public.Handlers, k)
 	}
-	sort.Strings(pubHandlers)
+	sort.Strings(net.Public.Handlers)
 
 	for k := range this.publicListeners {
-		pubServers = append(pubServers, k)
+		net.Public.Servers = append(net.Public.Servers, k)
 	}
-	sort.Strings(pubServers)
+	sort.Strings(net.Public.Servers)
 
-	handlers := make(map[string]map[string][]string)
-	handlers["private"] = make(map[string][]string)
-	handlers["public"] = make(map[string][]string)
+	return net
+}
 
-	handlers["private"]["servers"] = privServers
-	handlers["private"]["handlers"] = privHandlers
-	handlers["public"]["servers"] = pubServers
-	handlers["public"]["handlers"] = pubHandlers
+func (this *HttpSrv) Shutdown() {
+	this.configLock.Lock()
+	defer this.configLock.Unlock()
 
-	return handlers
+	srvLog.Info("net Shutdown")
+	for _, ln := range this.privateListeners {
+		ln.Close()
+	}
+
+	for _, ln := range this.publicListeners {
+		ln.Close()
+	}
 }
 
 func (this *HttpSrv) privStaticDir() string {
@@ -344,6 +403,8 @@ func (this *HttpSrv) restartPrivateHttp() {
 	// grab private network addresses
 	httpList := make(map[string]string)
 	TLSList := make(map[string]string)
+
+	localAddrsLock.RLock()
 	for x := range localAddrs {
 		if this.IsPrivateNetwork(localAddrs[x].String()) {
 			if this.privatePort > 0 {
@@ -363,6 +424,7 @@ func (this *HttpSrv) restartPrivateHttp() {
 			}
 		}
 	}
+	localAddrsLock.RUnlock()
 
 	// shut down old listeners
 	for k := range this.privateListeners {
@@ -442,6 +504,8 @@ func (this *HttpSrv) restartPublicHttp() {
 	// grab private network addresses
 	httpList := make(map[string]string)
 	TLSList := make(map[string]string)
+
+	localAddrsLock.RLock()
 	for x := range localAddrs {
 		local := false
 
@@ -471,6 +535,7 @@ func (this *HttpSrv) restartPublicHttp() {
 			}
 		}
 	}
+	localAddrsLock.RUnlock()
 
 	// shut down old listeners
 	for k := range this.publicListeners {
@@ -674,6 +739,12 @@ func NewHttpSrv() *HttpSrv {
 	return newSrv
 }
 
+func netGetNetId() string {
+	netCfgLock.Lock()
+	defer netCfgLock.Unlock()
+	return netId
+}
+
 func netInit() {
 	// populate list of local addresses
 	addrs, err := net.InterfaceAddrs()
@@ -681,6 +752,7 @@ func netInit() {
 		panic(err)
 	}
 
+	localAddrsLock.Lock()
 	localAddrs = make([]*net.IP, 0)
 	for i := range addrs {
 		addrParts := strings.Split(addrs[i].String(), "/")
@@ -697,6 +769,7 @@ func netInit() {
 	}
 
 	srvLog.Info("LocalAddresses: %v", localAddrs)
+	localAddrsLock.Unlock()
 
 	// populate list of private address networks
 	privateNets = make([]*net.IPNet, 0)
@@ -799,11 +872,10 @@ func netInit() {
 		PRIVATE_HANDLER,
 		ACCESS_LEVEL_ADMIN,
 	)
-
-	monInit()
 }
 
 func netShutdown() {
+	httpSrv.Shutdown()
 	monShutdown()
 	geoShutdown()
 	ipsShutdown()
