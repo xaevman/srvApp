@@ -287,9 +287,10 @@ func monCallHome() {
 		defer crash.HandleAll()
 
 		monCfgLock.RLock()
-		defer monCfgLock.RUnlock()
+		uri := monUri
+		monCfgLock.RUnlock()
 
-		c, _, err := websocket.DefaultDialer.Dial(monUri, nil)
+		c, _, err := websocket.DefaultDialer.Dial(uri, nil)
 		if err != nil {
 			Log().Error("Error connecting to monitoring service: %v", err)
 			if !_monShutdown.IsShutdown() {

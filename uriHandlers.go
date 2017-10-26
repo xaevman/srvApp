@@ -68,7 +68,7 @@ func getCountersJSON() ([]byte, error) {
 func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
 	data, err := getCountersJSON()
 	if err != nil {
-		srvLog.Error("OnAppInfoUri :: %v", err)
+		srvLog.Error("OnCountersUri :: %v", err)
 		http.Error(
 			resp,
 			fmt.Sprintf("%d : Internal Error", http.StatusInternalServerError),

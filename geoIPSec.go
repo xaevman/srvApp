@@ -6,6 +6,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/xaevman/ini"
 )
@@ -13,13 +14,15 @@ import (
 const GEO_DATA_FILE = "geo.dat"
 
 type GeoIpData struct {
-	Country     string  `json:"country_name"`
-	CountryCode string  `json:"country_code"`
-	Region      string  `json:"region_name"`
-	City        string  `json:"city"`
-	ZipCode     string  `json:"zip_code"`
-	Lat         float32 `json:"latitude"`
-	Long        float32 `json:"longitude"`
+	StartIPNum  uint64  `json:"-"`
+	EndIPNum    uint64  `json:"-"`
+	CountryCode string  `json:"country_code,omitempty"`
+	Country     string  `json:"country_name,omitempty"`
+	Region      string  `json:"region_name,omitempty"`
+	City        string  `json:"city,omitempty"`
+	Lat         float32 `json:"latitude,omitempty"`
+	Long        float32 `json:"longitude,omitempty"`
+	ZipCode     string  `json:"zip_code,omitempty"`
 }
 
 var (
@@ -29,8 +32,6 @@ var (
 		Region:      "RFC1918",
 		City:        "RFC1918",
 		ZipCode:     "RFC1918",
-		Lat:         0,
-		Long:        0,
 	}
 
 	geoDataUnknown = &GeoIpData{
@@ -39,8 +40,6 @@ var (
 		Region:      "Unknown",
 		City:        "Unknown",
 		ZipCode:     "Unknown",
-		Lat:         0,
-		Long:        0,
 	}
 )
 
@@ -54,6 +53,7 @@ var (
 var (
 	geoDataMap      = make(map[string]*GeoIpData)
 	geoCountryPerms map[string]bool
+	geoLastUpdate   = make(map[string]time.Time)
 )
 
 func geoInit() {
@@ -118,7 +118,13 @@ func geoResolveAddr(host string) *GeoIpData {
 	geoData, ok := geoDataMap[host]
 	geoCfgLock.RUnlock()
 	if ok {
-		return geoData
+		lastUpdate, ok := geoLastUpdate[host]
+		if ok && lastUpdate.Before(time.Now().Add(-(time.Hour * 24))) {
+			// cached entry is more than 24 hrs old - throw it away
+			delete(geoLastUpdate, host)
+		} else {
+			return geoData
+		}
 	}
 
 	// nope, let's request it
@@ -143,6 +149,7 @@ func geoResolveAddr(host string) *GeoIpData {
 
 	geoCfgLock.Lock()
 	geoDataMap[host] = &newGeo
+	geoLastUpdate[host] = time.Now()
 	geoCfgLock.Unlock()
 
 	return &newGeo

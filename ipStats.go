@@ -68,7 +68,7 @@ func ipsInit() {
 					defer ipsLock.Unlock()
 
 					ipsBuffer.Value = data
-					ipsBuffer.Next()
+					ipsBuffer = ipsBuffer.Next()
 				}()
 
 				monSendIpsUpdate(data)
