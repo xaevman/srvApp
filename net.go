@@ -188,6 +188,7 @@ func (this *HttpSrv) Configure(
 	publicStaticAccessLevel int,
 	ignoreAddrs []string,
 	tlsRedirect bool,
+	honorXForwardedFor bool,
 	certMap map[string]*tls.Certificate,
 	forceRestart bool,
 ) {
@@ -246,6 +247,9 @@ func (this *HttpSrv) Configure(
 	}
 
 	this.configureTLS(certMap, tlsRedirect)
+
+	this.publicMux.HonorXForwardedFor = honorXForwardedFor
+	this.privateMux.HonorXForwardedFor = honorXForwardedFor
 
 	if privateChanged || forceRestart {
 		this.restartPrivateHttp()
@@ -318,13 +322,13 @@ func (this *HttpSrv) GetSrvAddrs() []string {
 	this.configLock.RLock()
 	defer this.configLock.RUnlock()
 
-	for k, _ := range this.privateListeners {
+	for k := range this.privateListeners {
 		if len(k) > 0 {
 			result = append(result, k)
 		}
 	}
 
-	for k, _ := range this.publicListeners {
+	for k := range this.publicListeners {
 		if len(k) > 0 {
 			result = append(result, k)
 		}
@@ -836,7 +840,7 @@ func netInit() {
 		"/debug/ping/",
 		OnPingUri,
 		ALL_HANDLER,
-		ACCESS_LEVEL_USER,
+		ACCESS_LEVEL_NONE,
 	)
 
 	httpSrv.RegisterHandler(

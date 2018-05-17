@@ -24,6 +24,7 @@ const (
 	DefaultPublicStaticDir          = ""
 	DefaultPublicStaticAccessLevel  = "admin"
 	DefaultTLSRedirect              = true
+	DefaultHonorXForwardedFor       = false
 
 	DefaultSmtpFromAddr = ""
 	DefaultSmtpSrvAddr  = "smtp"

@@ -29,7 +29,8 @@ type XMux struct {
 	cntThrottleDeny counters.Counter
 	cntSuccess      counters.Counter
 
-	TLSRedirect bool
+	TLSRedirect        bool
+	HonorXForwardedFor bool
 }
 
 type muxEntry struct {
@@ -175,12 +176,29 @@ func (mux *XMux) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	h, pattern := mux.Handler(r)
 
-	host, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		srvLog.Error("Unable to parse remote host address (%s)", r.RemoteAddr)
-		http.Error(w, "StatusInternalServerError", http.StatusInternalServerError)
-		mux.cntParseFailed.Add(uint64(1))
-		return
+	var host string
+	if mux.HonorXForwardedFor {
+		// If X-Forwarded-For headers are provided, use those.
+		// Otherwise, use the remote address for IP security validation
+		host = r.Header.Get("X-Forwarded-For")
+	}
+
+	if len(host) < 1 {
+		srvLog.Debug("Using remote address %s", r.RemoteAddr)
+
+		hostPart, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil {
+			srvLog.Error("Unable to parse remote host address (%s)", r.RemoteAddr)
+			http.Error(w, "StatusInternalServerError", http.StatusInternalServerError)
+			mux.cntParseFailed.Add(uint64(1))
+			if err != nil {
+				return
+			}
+		}
+
+		host = hostPart
+	} else {
+		srvLog.Debug("Using X-Forwarded-For address %s", host)
 	}
 
 	// handler not found

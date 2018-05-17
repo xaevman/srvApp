@@ -136,6 +136,11 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 	tlsRedirect := val.GetValBool(0, DefaultTLSRedirect)
 	srvLog.Info("TLSRedirect: %t", tlsRedirect)
 
+	// XForwardedFor
+	val = sec.GetFirstVal("HonorXForwardedFor")
+	honorXForwardedFor := val.GetValBool(0, DefaultHonorXForwardedFor)
+	srvLog.Info("HonorXForwardedFor: %t", honorXForwardedFor)
+
 	val = sec.GetFirstVal("PrivateTLSPort")
 	privateTLSPort := val.GetValInt(0, DefaultPrivateTLSPort)
 	srvLog.Info("PrivateTLSPort: %d", privateTLSPort)
@@ -234,6 +239,7 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 		publicStaticAccessLevel,
 		ignoreAddrs,
 		tlsRedirect,
+		honorXForwardedFor,
 		certMap,
 		forceRestart,
 	)
