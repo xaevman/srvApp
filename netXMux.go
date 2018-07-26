@@ -304,3 +304,16 @@ func (mux *XMux) Handle(uriHandler *UriHandler) {
 func (mux *XMux) HandleFunc(uriHandler *UriHandler) {
 	mux.Handle(uriHandler)
 }
+
+// RemoveHandleFunc removes the handler functions for the given pattern.
+func (mux *XMux) RemoveHandleFunc(uriPattern string) {
+	mux.mu.Lock()
+	defer mux.mu.Unlock()
+
+	delete(mux.m, uriPattern)
+
+	n := len(uriPattern)
+	if n > 0 && uriPattern[n-1] == '/' && !mux.m[uriPattern[0:n-1]].explicit {
+		delete(mux.m, uriPattern[0:n-1])
+	}
+}

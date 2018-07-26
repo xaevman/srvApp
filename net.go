@@ -615,6 +615,26 @@ func (this *HttpSrv) restartPublicHttp() {
 	}
 }
 
+func (this *HttpSrv) RemoveHandler(path string) {
+	this.configLock.Lock()
+	defer this.configLock.Unlock()
+
+	this.removeHandler(path)
+}
+
+func (this *HttpSrv) removeHandler(path string) {
+	delete(this.privateHandlers, path)
+	this.privateMux.RemoveHandleFunc(path)
+
+	delete(this.publicHandlers, path)
+	this.publicMux.RemoveHandleFunc(path)
+
+	srvLog.Info(
+		"HttpHandler %s unregistered",
+		path,
+	)
+}
+
 func (this *HttpSrv) RegisterHandler(
 	path string,
 	f func(http.ResponseWriter, *http.Request),
