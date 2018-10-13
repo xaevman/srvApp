@@ -80,6 +80,11 @@ func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
 	resp.Write(data)
 }
 
+// OnConfigUri handles requests to the /debug/config uri.
+func OnConfigUri(resp http.ResponseWriter, req *http.Request) {
+	resp.Write([]byte(AppConfig().RawString()))
+}
+
 // OnCrashUri handles requests to the /cmd/crash/ uri.
 func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {

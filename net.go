@@ -843,6 +843,13 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"/debug/config/",
+		OnConfigUri,
+		PRIVATE_HANDLER,
+		ACCESS_LEVEL_ADMIN,
+	)
+
+	httpSrv.RegisterHandler(
 		"/debug/counters/",
 		OnCountersUri,
 		PRIVATE_HANDLER,
