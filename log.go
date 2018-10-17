@@ -18,8 +18,16 @@ import (
 	"github.com/xaevman/log/flog"
 	"github.com/xaevman/trace"
 
+	"fmt"
+	"os"
+	"path"
 	"sync"
+	"time"
 )
+
+// logShutdownChan is used to signal the log rotator goroutine
+// to exit cleanly.
+var logShutdownChan = make(chan chan interface{}, 0)
 
 // SrvLog contains helper functions which distribute log messages
 // between separate debug, info, and error log objects.
@@ -65,7 +73,7 @@ func (this *SrvLog) Close() {
 	this.lock.RLock()
 	defer this.lock.RUnlock()
 
-	for k, _ := range this.subs {
+	for k := range this.subs {
 		for i := range this.subs[k] {
 			l, ok := this.subs[k][i].(log.LogCloser)
 			if ok {
@@ -182,12 +190,49 @@ func (this *SrvLog) SetLogsEnabled(name string, val bool) {
 	}
 }
 
-// initLogs intializes the log buffer, console, and file-backed logging services
-// for the application.
+// closeLogs signals the log loop to cleanly close log files and exit
+func closeLogs() {
+	shutdownComplete := make(chan interface{}, 0)
+	logShutdownChan <- shutdownComplete
+	<-shutdownComplete
+}
+
+// initLogs runs a continuous loop, handling log initialization on startup,
+// and then rotating logs once per day. The loop is broken once a shutdown
+// signal is received on the logShutdownChan channel.
+// TODO @jared: change the interval to actually be once per day :P
 func initLogs() {
+	newLog()
+	go func() {
+		for {
+			select {
+			case shutdownComplete := <-logShutdownChan:
+				cycleLog()
+				shutdownComplete <- nil
+				return
+			case <-time.After(24 * time.Hour):
+				cycleLog()
+				newLog()
+			}
+		}
+	}()
+}
+
+// newLog intializes the log buffer, console, and file-backed logging services
+// for the application.
+func newLog() {
 	logBuffer = log.NewLogBuffer(DefaultHttpLogBuffers)
 	srvLog = NewSrvLog()
 
 	trace.DebugLogger = srvLog
 	trace.ErrorLogger = srvLog
+}
+
+func cycleLog() {
+	srvLog.Info("Log rotate")
+	srvLog.Close()
+
+	srcPath := path.Join(logDir, "all.log")
+	dstPath := fmt.Sprintf("%s.%d", srcPath, time.Now().UTC().Unix())
+	os.Rename(srcPath, dstPath)
 }

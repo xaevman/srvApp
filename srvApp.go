@@ -382,7 +382,7 @@ func _shutdown() {
 		}
 	}
 
-	Log().Close()
+	closeLogs()
 }
 
 // _signalShutdown asynchronously signals the application to shutdown.
