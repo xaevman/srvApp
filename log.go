@@ -200,7 +200,6 @@ func closeLogs() {
 // initLogs runs a continuous loop, handling log initialization on startup,
 // and then rotating logs once per day. The loop is broken once a shutdown
 // signal is received on the logShutdownChan channel.
-// TODO @jared: change the interval to actually be once per day :P
 func initLogs() {
 	newLog()
 	go func() {
@@ -228,6 +227,7 @@ func newLog() {
 	trace.ErrorLogger = srvLog
 }
 
+// cycleLog closes the log file and renames it to include a UTC unix timestamp
 func cycleLog() {
 	srvLog.Info("Log rotate")
 	srvLog.Close()
