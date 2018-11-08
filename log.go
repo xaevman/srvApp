@@ -29,17 +29,24 @@ import (
 // to exit cleanly.
 var logShutdownChan = make(chan chan interface{}, 0)
 
+// LogService represents a named collection of related LogNotify objects
+// within a SrvLog and maintains the enabled flag for that named log.
+type LogService struct {
+	enabled   bool
+	notifiers []log.LogNotify
+}
+
 // SrvLog contains helper functions which distribute log messages
 // between separate debug, info, and error log objects.
 type SrvLog struct {
 	lock sync.RWMutex
-	subs map[string][]log.LogNotify
+	subs map[string]*LogService
 }
 
 // NewSrvLog returns a new instance of a SrvLog object.
 func NewSrvLog() *SrvLog {
 	obj := &SrvLog{
-		subs: make(map[string][]log.LogNotify),
+		subs: make(map[string]*LogService),
 	}
 
 	obj.AddLog("debug", logBuffer)
@@ -60,12 +67,17 @@ func (this *SrvLog) AddLog(name string, newLog log.LogNotify) {
 	this.lock.Lock()
 	defer this.lock.Unlock()
 
-	_, ok := this.subs[name]
-	if !ok {
-		this.subs[name] = make([]log.LogNotify, 0, 1)
+	logger, exists := this.subs[name]
+	if !exists {
+		logger = &LogService{
+			enabled:   true,
+			notifiers: make([]log.LogNotify, 0, 1),
+		}
+
+		this.subs[name] = logger
 	}
 
-	this.subs[name] = append(this.subs[name], newLog)
+	logger.notifiers = append(logger.notifiers, newLog)
 }
 
 // Close closes the debug, err, and info flog instances.
@@ -74,9 +86,9 @@ func (this *SrvLog) Close() {
 	defer this.lock.RUnlock()
 
 	for k := range this.subs {
-		for i := range this.subs[k] {
-			l, ok := this.subs[k][i].(log.LogCloser)
-			if ok {
+		for i := range this.subs[k].notifiers {
+			l, isLogCloser := this.subs[k].notifiers[i].(log.LogCloser)
+			if isLogCloser {
 				l.Close()
 			}
 		}
@@ -134,24 +146,28 @@ func (this *SrvLog) LogTo(local bool, name, format string, v ...interface{}) {
 	this.lock.RLock()
 	defer this.lock.RUnlock()
 
-	logs, ok := this.subs[name]
-	if !ok {
+	logs, exists := this.subs[name]
+	if !exists {
 		srvLog.Error("Couldn't log to %s logs. Loggers missing.", name)
 		return
 	}
 
-	for i := range logs {
-		logs[i].Print(msg)
+	if !logs.enabled {
+		return
+	}
+
+	for i := range logs.notifiers {
+		logs.notifiers[i].Print(msg)
 	}
 }
 
-// SetDebugFlushIntervalSec sets the flush interval for the debug log.
+// SetDebugFlushIntervalSec sets the flush interval for the named log.
 func (this *SrvLog) SetFlushIntervalSec(name string, interval int32) {
 	this.lock.RLock()
 	defer this.lock.RUnlock()
 
-	logs, ok := this.subs[name]
-	if !ok {
+	logs, exists := this.subs[name]
+	if !exists {
 		srvLog.Error(
 			"Couldn't change flush interval on %s logs. Loggers missing",
 			name,
@@ -159,21 +175,21 @@ func (this *SrvLog) SetFlushIntervalSec(name string, interval int32) {
 		return
 	}
 
-	for i := range logs {
-		dbgLog, ok := logs[i].(*flog.BufferedLog)
-		if ok {
+	for i := range logs.notifiers {
+		dbgLog, isBuffered := logs.notifiers[i].(*flog.BufferedLog)
+		if isBuffered {
 			dbgLog.SetFlushIntervalSec(interval)
 		}
 	}
 }
 
-// SetDebugLogs enables or disables debug logging.
+// SetDebugLogs enables or disables named logs.
 func (this *SrvLog) SetLogsEnabled(name string, val bool) {
 	this.lock.RLock()
 	defer this.lock.RUnlock()
 
-	logs, ok := this.subs[name]
-	if !ok {
+	logs, exists := this.subs[name]
+	if !exists {
 		srvLog.Error(
 			"Couldn't set enabled (%t) on %s logs. Loggers missing",
 			val,
@@ -182,12 +198,7 @@ func (this *SrvLog) SetLogsEnabled(name string, val bool) {
 		return
 	}
 
-	for i := range logs {
-		l, ok := logs[i].(log.LogToggler)
-		if ok {
-			l.SetEnabled(val)
-		}
-	}
+	logs.enabled = val
 }
 
 // closeLogs signals the log loop to cleanly close log files and exit
