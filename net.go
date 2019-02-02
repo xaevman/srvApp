@@ -836,6 +836,13 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"/cmd/update_config/",
+		OnConfigUri,
+		PRIVATE_HANDLER,
+		ACCESS_LEVEL_ADMIN,
+	)
+
+	httpSrv.RegisterHandler(
 		"/debug/appinfo/",
 		OnAppInfoUri,
 		PRIVATE_HANDLER,

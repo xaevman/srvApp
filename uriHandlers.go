@@ -15,6 +15,7 @@ package srvApp
 import (
 	"github.com/xaevman/app"
 	"github.com/xaevman/crash"
+	"github.com/xaevman/ini"
 	"github.com/xaevman/log"
 
 	"bufio"
@@ -83,6 +84,11 @@ func OnCountersUri(resp http.ResponseWriter, req *http.Request) {
 // OnConfigUri handles requests to the /debug/config uri.
 func OnConfigUri(resp http.ResponseWriter, req *http.Request) {
 	resp.Write([]byte(AppConfig().RawString()))
+}
+
+// OnConfigUpdate handles requests to the /debug/config uri.
+func OnConfigUpdate(resp http.ResponseWriter, req *http.Request) {
+	ini.ForceUpdate()
 }
 
 // OnCrashUri handles requests to the /cmd/crash/ uri.
