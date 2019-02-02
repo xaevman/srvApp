@@ -1,4 +1,4 @@
-module srvApp
+module github.com/xaevman/srvApp
 
 require (
 	github.com/gorilla/websocket v1.4.0
