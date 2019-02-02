@@ -88,6 +88,15 @@ func OnConfigUri(resp http.ResponseWriter, req *http.Request) {
 
 // OnConfigUpdate handles requests to the /debug/config uri.
 func OnConfigUpdate(resp http.ResponseWriter, req *http.Request) {
+	if req.Method != "POST" {
+		http.Error(
+			resp,
+			fmt.Sprintf("%d : Method not supported", http.StatusMethodNotAllowed),
+			http.StatusMethodNotAllowed,
+		)
+		return
+	}
+
 	ini.ForceUpdate()
 }
 
