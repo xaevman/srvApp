@@ -86,8 +86,8 @@ func OnConfigUri(resp http.ResponseWriter, req *http.Request) {
 	resp.Write([]byte(AppConfig().RawString()))
 }
 
-// OnConfigUpdate handles requests to the /debug/config uri.
-func OnConfigUpdate(resp http.ResponseWriter, req *http.Request) {
+// OnUpdateConfigUri handles requests to the /debug/config uri.
+func OnUpdateConfigUri(resp http.ResponseWriter, req *http.Request) {
 	if req.Method != "POST" {
 		http.Error(
 			resp,
