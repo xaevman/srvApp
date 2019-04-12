@@ -13,7 +13,6 @@
 package srvApp
 
 import (
-	"github.com/xaevman/crash"
 	"github.com/xaevman/log"
 	"github.com/xaevman/log/flog"
 	"github.com/xaevman/trace"
@@ -135,13 +134,6 @@ func (this *SrvLog) InfoLocal(format string, v ...interface{}) {
 // the supplied formatting string and arguments.
 func (this *SrvLog) LogTo(local bool, name, format string, v ...interface{}) {
 	msg := log.NewLogMsg(name, format, 3, v...)
-
-	if !local {
-		go func() {
-			defer crash.HandleAll()
-			monSendLogUpdate(msg)
-		}()
-	}
 
 	this.lock.RLock()
 	defer this.lock.RUnlock()

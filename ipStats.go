@@ -70,8 +70,6 @@ func ipsInit() {
 					ipsBuffer.Value = data
 					ipsBuffer = ipsBuffer.Next()
 				}()
-
-				monSendIpsUpdate(data)
 			}
 		}
 	}()

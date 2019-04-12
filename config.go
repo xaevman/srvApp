@@ -246,11 +246,4 @@ func cfgNet(cfg *ini.IniCfg, changeCount int) {
 
 	netId = cfg.ConfigVer
 	srvLog.Info("NetId: %s", netId)
-
-	if changeCount == 0 {
-		go func() {
-			defer crash.HandleAll()
-			monInit()
-		}()
-	}
 }

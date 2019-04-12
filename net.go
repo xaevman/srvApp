@@ -914,7 +914,6 @@ func netInit() {
 
 func netShutdown() {
 	httpSrv.Shutdown()
-	monShutdown()
 	geoShutdown()
 	ipsShutdown()
 }
