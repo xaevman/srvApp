@@ -5,7 +5,7 @@
 
 ## Overview
 srvApp is a Go package which makes it easy to create server processes with a consistent set of base infrastructure like
-logging, event-driven ini configuration, ip and geo-ip based registration of http handlers, static file serving capabilities, and
+logging, event-driven ini configuration, ip and geo-ip based security around registration of http handlers, static file serving capabilities, and
 simple message key authentication of requests. srvApp applications also contain basic windows service helpers which make them capable
 of registering and unregistering themselves with the Windows Service Control Manager.
 
