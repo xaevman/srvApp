@@ -3,4 +3,8 @@ language: go
 go:
  - "1.12"
 
-gobuild_args: -v -race
+env:
+  global:
+    - GO111MODULE=on
+
+script: go test -v -race ./...
