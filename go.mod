@@ -1,7 +1,6 @@
 module github.com/xaevman/srvApp
 
 require (
-	github.com/gorilla/websocket v1.4.0
 	github.com/xaevman/app v0.0.0-20151221185256-b8352f6c1f61
 	github.com/xaevman/counters v0.0.0-20180726222205-47700f82e94f
 	github.com/xaevman/crash v0.0.0-20160116021402-4f12454dac5a
