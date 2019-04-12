@@ -18,10 +18,10 @@ package srvApp
 func afterFlags() {}
 
 // run starts a typical, console-based, application execution.
-func run() {
+func run() int {
 	if !startSingleton() {
-		shutdownChan <- true
+		SignalShutdown(1)
 	}
 
-	blockUntilShutdown()
+	return blockUntilShutdown()
 }
