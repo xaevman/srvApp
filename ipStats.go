@@ -42,6 +42,7 @@ func ipsInit() {
 	srvLog.Info("ips Init")
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/ipstats/",
 		ipsOnUri,
 		PRIVATE_HANDLER,

@@ -152,6 +152,7 @@ func (this *srvAppListener) listen(addr string, tlsCfg *tls.Config) error {
 }
 
 type UriHandler struct {
+	Method         string
 	Handler        http.Handler
 	Pattern        string
 	RequiredAccess int
@@ -214,6 +215,7 @@ func (this *HttpSrv) Configure(
 		this.privateStaticDir = privateStaticDir
 		if privateStaticDir != "" {
 			httpSrv.registerHandler(
+				"GET",
 				"/",
 				OnPrivStaticSrvUri,
 				PRIVATE_HANDLER,
@@ -237,6 +239,7 @@ func (this *HttpSrv) Configure(
 		this.publicStaticDir = publicStaticDir
 		if publicStaticDir != "" {
 			httpSrv.registerHandler(
+				"GET",
 				"/",
 				OnPubStaticSrvUri,
 				PUBLIC_HANDLER,
@@ -615,19 +618,19 @@ func (this *HttpSrv) restartPublicHttp() {
 	}
 }
 
-func (this *HttpSrv) RemoveHandler(path string) {
+func (this *HttpSrv) RemoveHandler(method string, path string) {
 	this.configLock.Lock()
 	defer this.configLock.Unlock()
 
-	this.removeHandler(path)
+	this.removeHandler(method, path)
 }
 
-func (this *HttpSrv) removeHandler(path string) {
-	delete(this.privateHandlers, path)
-	this.privateMux.RemoveHandleFunc(path)
+func (this *HttpSrv) removeHandler(method string, path string) {
+	delete(this.privateHandlers, makeKey(method, path))
+	this.privateMux.RemoveHandleFunc(method, path)
 
-	delete(this.publicHandlers, path)
-	this.publicMux.RemoveHandleFunc(path)
+	delete(this.publicHandlers, makeKey(method, path))
+	this.publicMux.RemoveHandleFunc(method, path)
 
 	srvLog.Info(
 		"HttpHandler %s unregistered",
@@ -636,6 +639,7 @@ func (this *HttpSrv) removeHandler(path string) {
 }
 
 func (this *HttpSrv) RegisterHandler(
+	method string,
 	path string,
 	f func(http.ResponseWriter, *http.Request),
 	handlerType byte,
@@ -644,50 +648,63 @@ func (this *HttpSrv) RegisterHandler(
 	this.configLock.Lock()
 	defer this.configLock.Unlock()
 
-	this.registerHandler(path, f, handlerType, accessLevel)
+	this.registerHandler(method, path, f, handlerType, accessLevel)
 }
 
 func (this *HttpSrv) registerHandler(
+	method string,
 	path string,
 	f func(http.ResponseWriter, *http.Request),
 	handlerType byte,
 	accessLevel int,
 ) {
+	// verify the path is valid
+	if len(path) == 0 || path[0] != '/' {
+		panic(fmt.Sprintf("route path must begin with a '/'. got='%s'", path))
+	}
+
 	uriHandler := &UriHandler{
+		Method:         method,
 		Handler:        http.HandlerFunc(f),
 		Pattern:        path,
 		RequiredAccess: accessLevel,
 	}
 
+	key := makeKey(method, path)
+
 	switch handlerType {
 	case PRIVATE_HANDLER:
-		this.privateHandlers[path] = uriHandler
+		this.privateHandlers[key] = uriHandler
 		this.privateMux.HandleFunc(uriHandler)
 		srvLog.Info(
-			"Private HttpHandler %s registered (%s)",
+			"Private HttpHandler %s %s registered (%s)",
+			method,
 			path,
 			AccessLevelStr[accessLevel],
 		)
 	case PUBLIC_HANDLER:
-		this.publicHandlers[path] = uriHandler
+		this.publicHandlers[key] = uriHandler
 		this.publicMux.HandleFunc(uriHandler)
 		srvLog.Info(
-			"Public HttpHandler %s registered (%s)",
+			"Public HttpHandler %s %s registered (%s)",
+			method,
 			path,
 			AccessLevelStr[accessLevel],
 		)
 	case ALL_HANDLER:
-		this.privateHandlers[path] = uriHandler
+		this.privateHandlers[key] = uriHandler
 		this.privateMux.HandleFunc(uriHandler)
 		srvLog.Info(
-			"Private HttpHandler %s registered (%s)",
+			"Private HttpHandler %s %s registered (%s)",
+			method,
 			path,
 			AccessLevelStr[accessLevel],
 		)
-		this.publicHandlers[path] = uriHandler
+		this.publicHandlers[key] = uriHandler
 		this.publicMux.HandleFunc(uriHandler)
 		srvLog.Info(
-			"Public HttpHandler %s registered (%s)",
+			"Public HttpHandler %s %s registered (%s)",
+			method,
 			path,
 			AccessLevelStr[accessLevel],
 		)
@@ -822,6 +839,7 @@ func netInit() {
 
 	// configure http handlers
 	httpSrv.RegisterHandler(
+		"POST",
 		"/cmd/crash/",
 		OnCrashUri,
 		PRIVATE_HANDLER,
@@ -829,6 +847,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"POST",
 		"/cmd/shutdown/",
 		OnShutdownUri,
 		PRIVATE_HANDLER,
@@ -836,6 +855,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"POST",
 		"/cmd/update_config/",
 		OnUpdateConfigUri,
 		PRIVATE_HANDLER,
@@ -843,6 +863,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/appinfo/",
 		OnAppInfoUri,
 		PRIVATE_HANDLER,
@@ -850,6 +871,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/config/",
 		OnConfigUri,
 		PRIVATE_HANDLER,
@@ -857,6 +879,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/counters/",
 		OnCountersUri,
 		PRIVATE_HANDLER,
@@ -864,6 +887,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/logs/",
 		OnLogsUri,
 		PRIVATE_HANDLER,
@@ -871,6 +895,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/ping/",
 		OnPingUri,
 		ALL_HANDLER,
@@ -878,6 +903,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/pprof/",
 		http.HandlerFunc(pprof.Index),
 		PRIVATE_HANDLER,
@@ -885,12 +911,14 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/pprof/cmdline",
 		http.HandlerFunc(pprof.Cmdline),
 		PRIVATE_HANDLER,
 		ACCESS_LEVEL_ADMIN)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/pprof/profile",
 		http.HandlerFunc(pprof.Profile),
 		PRIVATE_HANDLER,
@@ -898,6 +926,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/pprof/symbol",
 		http.HandlerFunc(pprof.Symbol),
 		PRIVATE_HANDLER,
@@ -905,6 +934,7 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"GET",
 		"/debug/pprof/trace",
 		http.HandlerFunc(pprof.Trace),
 		PRIVATE_HANDLER,

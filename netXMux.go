@@ -127,10 +127,11 @@ func (mux *XMux) match(path string) (h *UriHandler, pattern string) {
 func (mux *XMux) Handler(r *http.Request) (h *UriHandler, pattern string) {
 	if r.Method != "CONNECT" {
 		if p := cleanPath(r.URL.Path); p != r.URL.Path {
-			_, pattern = mux.handler(r.Host, p)
+			_, pattern = mux.handler(r.Host, r.Method, p)
 			url := *r.URL
 			url.Path = p
 			redirect := &UriHandler{
+				Method:         r.Method,
 				Handler:        http.RedirectHandler(url.String(), http.StatusMovedPermanently),
 				Pattern:        pattern,
 				RequiredAccess: ACCESS_LEVEL_NONE,
@@ -139,21 +140,21 @@ func (mux *XMux) Handler(r *http.Request) (h *UriHandler, pattern string) {
 		}
 	}
 
-	return mux.handler(r.Host, r.URL.Path)
+	return mux.handler(r.Host, r.Method, r.URL.Path)
 }
 
 // handler is the main implementation of Handler.
 // The path is known to be in canonical form, except for CONNECT methods.
-func (mux *XMux) handler(host, path string) (h *UriHandler, pattern string) {
+func (mux *XMux) handler(host, method, path string) (h *UriHandler, pattern string) {
 	mux.mu.RLock()
 	defer mux.mu.RUnlock()
 
 	// Host-specific pattern takes precedence over generic ones
 	if mux.hosts {
-		h, pattern = mux.match(host + path)
+		h, pattern = mux.match(host + makeKey(method, path))
 	}
 	if h == nil {
-		h, pattern = mux.match(path)
+		h, pattern = mux.match(makeKey(method, path))
 	}
 	return
 }
@@ -253,17 +254,20 @@ func (mux *XMux) Handle(uriHandler *UriHandler) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
 
+	key := makeKey(uriHandler.Method, uriHandler.Pattern)
+	keyNoTrailingSlash := makeKey(uriHandler.Method, uriHandler.Pattern[0:len(uriHandler.Pattern)-1])
+
 	if uriHandler.Pattern == "" {
 		panic("http: invalid pattern " + uriHandler.Pattern)
 	}
 	if uriHandler.Handler == nil {
 		panic("http: nil handler")
 	}
-	if mux.m[uriHandler.Pattern].explicit {
-		panic("http: multiple registrations for " + uriHandler.Pattern)
+	if mux.m[key].explicit {
+		panic("http: multiple registrations for " + key)
 	}
 
-	mux.m[uriHandler.Pattern] = muxEntry{
+	mux.m[key] = muxEntry{
 		explicit: true,
 		h:        uriHandler,
 		pattern:  uriHandler.Pattern,
@@ -277,7 +281,7 @@ func (mux *XMux) Handle(uriHandler *UriHandler) {
 	// If pattern is /tree/, insert an implicit permanent redirect for /tree.
 	// It can be overridden by an explicit registration.
 	n := len(uriHandler.Pattern)
-	if n > 0 && uriHandler.Pattern[n-1] == '/' && !mux.m[uriHandler.Pattern[0:n-1]].explicit {
+	if n > 0 && uriHandler.Pattern[n-1] == '/' && !mux.m[keyNoTrailingSlash].explicit {
 		// If pattern contains a host name, strip it and use remaining
 		// path for redirect.
 		path := uriHandler.Pattern
@@ -288,12 +292,13 @@ func (mux *XMux) Handle(uriHandler *UriHandler) {
 		}
 		url := &url.URL{Path: path}
 		helper := &UriHandler{
+			Method:         uriHandler.Method,
 			Handler:        http.RedirectHandler(url.String(), http.StatusMovedPermanently),
 			Pattern:        uriHandler.Pattern[0 : n-1],
 			RequiredAccess: uriHandler.RequiredAccess,
 		}
 
-		mux.m[uriHandler.Pattern[0:n-1]] = muxEntry{
+		mux.m[keyNoTrailingSlash] = muxEntry{
 			h:       helper,
 			pattern: uriHandler.Pattern,
 		}
@@ -306,14 +311,22 @@ func (mux *XMux) HandleFunc(uriHandler *UriHandler) {
 }
 
 // RemoveHandleFunc removes the handler functions for the given pattern.
-func (mux *XMux) RemoveHandleFunc(uriPattern string) {
+func (mux *XMux) RemoveHandleFunc(method string, uriPattern string) {
 	mux.mu.Lock()
 	defer mux.mu.Unlock()
 
-	delete(mux.m, uriPattern)
+	key := makeKey(method, uriPattern)
+	keyNoTrailingSlash := makeKey(method, uriPattern[0:len(uriPattern)-1])
+
+	delete(mux.m, key)
 
 	n := len(uriPattern)
-	if n > 0 && uriPattern[n-1] == '/' && !mux.m[uriPattern[0:n-1]].explicit {
-		delete(mux.m, uriPattern[0:n-1])
+	if n > 0 && uriPattern[n-1] == '/' && !mux.m[keyNoTrailingSlash].explicit {
+		delete(mux.m, keyNoTrailingSlash)
 	}
+}
+
+// makeKey creates the mux key for a handler
+func makeKey(args ...string) string {
+	return strings.Join(args, ":")
 }

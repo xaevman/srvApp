@@ -88,29 +88,11 @@ func OnConfigUri(resp http.ResponseWriter, req *http.Request) {
 
 // OnUpdateConfigUri handles requests to the /debug/config uri.
 func OnUpdateConfigUri(resp http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
-		http.Error(
-			resp,
-			fmt.Sprintf("%d : Method not supported", http.StatusMethodNotAllowed),
-			http.StatusMethodNotAllowed,
-		)
-		return
-	}
-
 	ini.ForceUpdate()
 }
 
 // OnCrashUri handles requests to the /cmd/crash/ uri.
 func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
-		http.Error(
-			resp,
-			fmt.Sprintf("%d : Method not supported", http.StatusMethodNotAllowed),
-			http.StatusMethodNotAllowed,
-		)
-		return
-	}
-
 	resp.Write([]byte("Crash initiated\n"))
 
 	srvLog.Info("Crash initiated via http request")
@@ -194,15 +176,6 @@ func OnPubStaticSrvUri(resp http.ResponseWriter, req *http.Request) {
 
 // OnShutdownUri handles requests on the /cmd/shutdown/ uri.
 func OnShutdownUri(resp http.ResponseWriter, req *http.Request) {
-	if req.Method != "POST" {
-		http.Error(
-			resp,
-			fmt.Sprintf("%d : Method not supported", http.StatusMethodNotAllowed),
-			http.StatusMethodNotAllowed,
-		)
-		return
-	}
-
 	resp.Write([]byte("Shutdown initiated\n"))
 
 	srvLog.Info("Shutdown initiated via http request")
