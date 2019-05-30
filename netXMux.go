@@ -316,13 +316,15 @@ func (mux *XMux) RemoveHandleFunc(method string, uriPattern string) {
 	defer mux.mu.Unlock()
 
 	key := makeKey(method, uriPattern)
-	keyNoTrailingSlash := makeKey(method, uriPattern[0:len(uriPattern)-1])
 
 	delete(mux.m, key)
 
 	n := len(uriPattern)
-	if n > 0 && uriPattern[n-1] == '/' && !mux.m[keyNoTrailingSlash].explicit {
-		delete(mux.m, keyNoTrailingSlash)
+	if n > 0 && uriPattern[n-1] == '/' {
+		keyNoTrailingSlash := makeKey(method, uriPattern[0:len(uriPattern)-1])
+		if !mux.m[keyNoTrailingSlash].explicit {
+			delete(mux.m, keyNoTrailingSlash)
+		}
 	}
 }
 
