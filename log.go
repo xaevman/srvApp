@@ -13,15 +13,16 @@
 package srvApp
 
 import (
-	"github.com/xaevman/log"
-	"github.com/xaevman/log/flog"
-	"github.com/xaevman/trace"
-
 	"fmt"
 	"os"
 	"path"
+	"sort"
 	"sync"
 	"time"
+
+	"github.com/xaevman/log"
+	"github.com/xaevman/log/flog"
+	"github.com/xaevman/trace"
 )
 
 // logShutdownChan is used to signal the log rotator goroutine
@@ -38,14 +39,16 @@ type LogService struct {
 // SrvLog contains helper functions which distribute log messages
 // between separate debug, info, and error log objects.
 type SrvLog struct {
-	lock sync.RWMutex
-	subs map[string]*LogService
+	lock   sync.RWMutex
+	subs   map[string]*LogService
+	fields map[string]interface{}
 }
 
 // NewSrvLog returns a new instance of a SrvLog object.
 func NewSrvLog() *SrvLog {
 	obj := &SrvLog{
-		subs: make(map[string]*LogService),
+		subs:   make(map[string]*LogService),
+		fields: make(map[string]interface{}),
 	}
 
 	obj.AddLog("debug", logBuffer)
@@ -58,6 +61,19 @@ func NewSrvLog() *SrvLog {
 	obj.AddLog("error", fileLog)
 	obj.AddLog("info", fileLog)
 
+	return obj
+}
+
+// NewNopSrvLog returns a new instance of a SrvLog object that doesn't log to disk.
+func NewNopSrvLog() *SrvLog {
+	obj := &SrvLog{
+		subs:   make(map[string]*LogService),
+		fields: make(map[string]interface{}),
+	}
+	logNop := log.NewLogBuffer(1)
+	obj.AddLog("debug", logNop)
+	obj.AddLog("error", logNop)
+	obj.AddLog("info", logNop)
 	return obj
 }
 
@@ -148,6 +164,22 @@ func (this *SrvLog) LogTo(local bool, name, format string, v ...interface{}) {
 		return
 	}
 
+	// append fields to the message
+	fieldCount := len(this.fields)
+	if fieldCount > 0 {
+		keys := make([]string, 0, fieldCount)
+		for key := range this.fields {
+			keys = append(keys, key)
+		}
+		sort.Strings(keys)
+		for index, key := range keys {
+			if index > 0 {
+				msg.Message += ","
+			}
+			msg.Message += fmt.Sprintf(" %s=%+v", key, this.fields[key])
+		}
+	}
+
 	for i := range logs.notifiers {
 		logs.notifiers[i].Print(msg)
 	}
@@ -191,6 +223,38 @@ func (this *SrvLog) SetLogsEnabled(name string, val bool) {
 	}
 
 	logs.enabled = val
+}
+
+// WithField stores a key, value pair in the logger that will be included in all subsquent logs.
+func (this *SrvLog) WithField(key string, value interface{}) *SrvLog {
+	return this.WithFields(map[string]interface{}{
+		key: value,
+	})
+}
+
+// WithFields stores all the given key, value pairs in the logger that will be includeded in all subsequent logs.
+func (this *SrvLog) WithFields(fields map[string]interface{}) *SrvLog {
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
+	newSubs := make(map[string]*LogService)
+	for key, val := range this.subs {
+		newSubs[key] = val
+	}
+
+	newFields := make(map[string]interface{})
+	for key, val := range this.fields {
+		newFields[key] = val
+	}
+	for key, val := range fields {
+		newFields[key] = val
+	}
+
+	derived := &SrvLog{
+		subs:   newSubs,
+		fields: newFields,
+	}
+	return derived
 }
 
 // closeLogs signals the log loop to cleanly close log files and exit
