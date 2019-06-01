@@ -64,19 +64,6 @@ func NewSrvLog() *SrvLog {
 	return obj
 }
 
-// NewNopSrvLog returns a new instance of a SrvLog object that doesn't log to disk.
-func NewNopSrvLog() *SrvLog {
-	obj := &SrvLog{
-		subs:   make(map[string]*LogService),
-		fields: make(map[string]interface{}),
-	}
-	logNop := log.NewLogBuffer(1)
-	obj.AddLog("debug", logNop)
-	obj.AddLog("error", logNop)
-	obj.AddLog("info", logNop)
-	return obj
-}
-
 // AddLog
 func (this *SrvLog) AddLog(name string, newLog log.LogNotify) {
 	this.lock.Lock()
