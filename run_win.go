@@ -95,19 +95,8 @@ func (this *appSvc) Execute(
 	return
 }
 
-// afterFlags captures the service install and uninstall run modes
-// and executes them, if needed, after command-line flags are parsed.
-func afterFlags() {
-	switch runMode {
-	case INST_SVC:
-		installSvc()
-	case UNINST_SVC:
-		uninstallSvc()
-	}
-}
-
 // installSvc attempts to install the running binary as a windows service.
-func installSvc() {
+func InstallSvc() {
 	srvLog.Info("Installing service %s", app.GetName())
 	scm, err := mgr.Connect()
 	if err != nil {
@@ -159,6 +148,51 @@ func installSvc() {
 	_signalShutdown(0)
 }
 
+// uninstallSvc attempts to uninstall the running binary from the service
+// control manager.
+func UninstallSvc() {
+	srvLog.Info("Removing service %s", app.GetName())
+	scm, err := mgr.Connect()
+	if err != nil {
+		srvLog.Error("Error connecting to SCM: %v", err)
+		_signalShutdown(1)
+		return
+	}
+
+	defer scm.Disconnect()
+
+	s, err := scm.OpenService(app.GetName())
+	if err != nil {
+		srvLog.Error("Service %s doesn't exist", app.GetName())
+		_signalShutdown(1)
+		return
+	}
+
+	s.Control(svc.Stop)
+
+	defer s.Close()
+	err = s.Delete()
+	if err != nil {
+		srvLog.Error("Error deleting service: %v", err)
+		_signalShutdown(1)
+		return
+	}
+
+	srvLog.Info("Service %s deleted", app.GetName())
+	_signalShutdown(0)
+}
+
+// afterFlags captures the service install and uninstall run modes
+// and executes them, if needed, after command-line flags are parsed.
+func afterFlags() {
+	switch runMode {
+	case INST_SVC:
+		InstallSvc()
+	case UNINST_SVC:
+		UninstallSvc()
+	}
+}
+
 // run executes the application in either console or service run mode,
 // depending on the arguments supplied on the command line.
 func run() int {
@@ -192,38 +226,4 @@ func runSvc() int {
 	}
 
 	return 0
-}
-
-// uninstallSvc attempts to uninstall the running binary from the service
-// control manager.
-func uninstallSvc() {
-	srvLog.Info("Removing service %s", app.GetName())
-	scm, err := mgr.Connect()
-	if err != nil {
-		srvLog.Error("Error connecting to SCM: %v", err)
-		_signalShutdown(1)
-		return
-	}
-
-	defer scm.Disconnect()
-
-	s, err := scm.OpenService(app.GetName())
-	if err != nil {
-		srvLog.Error("Service %s doesn't exist", app.GetName())
-		_signalShutdown(1)
-		return
-	}
-
-	s.Control(svc.Stop)
-
-	defer s.Close()
-	err = s.Delete()
-	if err != nil {
-		srvLog.Error("Error deleting service: %v", err)
-		_signalShutdown(1)
-		return
-	}
-
-	srvLog.Info("Service %s deleted", app.GetName())
-	_signalShutdown(0)
 }

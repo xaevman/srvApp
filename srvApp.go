@@ -387,6 +387,10 @@ func _shutdown() {
 
 // _signalShutdown asynchronously signals the application to shutdown.
 func _signalShutdown(returnCode int) {
+	if shuttingDown {
+		return
+	}
+
 	shuttingDown = true
 	exitCode = returnCode
 
