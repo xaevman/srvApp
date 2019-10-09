@@ -91,6 +91,11 @@ func OnUpdateConfigUri(resp http.ResponseWriter, req *http.Request) {
 	ini.ForceUpdate()
 }
 
+// OnRotateLogsUri handles requests to the /cmd/rotate_logs uri.
+func OnRotateLogsUri(resp http.ResponseWriter, req *http.Request) {
+	logRotateChan <- nil
+}
+
 // OnCrashUri handles requests to the /cmd/crash/ uri.
 func OnCrashUri(resp http.ResponseWriter, req *http.Request) {
 	resp.Write([]byte("Crash initiated\n"))

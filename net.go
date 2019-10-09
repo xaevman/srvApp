@@ -863,6 +863,14 @@ func netInit() {
 	)
 
 	httpSrv.RegisterHandler(
+		"POST",
+		"/cmd/rotate_logs/",
+		OnRotateLogsUri,
+		PRIVATE_HANDLER,
+		ACCESS_LEVEL_ADMIN,
+	)
+
+	httpSrv.RegisterHandler(
 		"GET",
 		"/debug/appinfo/",
 		OnAppInfoUri,

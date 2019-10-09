@@ -12,3 +12,5 @@ require (
 	github.com/xaevman/win32 v0.0.0-20171020222159-1eed552269eb
 	golang.org/x/sys v0.0.0-20190201152629-afcc84fd7533
 )
+
+go 1.13

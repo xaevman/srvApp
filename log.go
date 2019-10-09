@@ -28,6 +28,7 @@ import (
 // logShutdownChan is used to signal the log rotator goroutine
 // to exit cleanly.
 var logShutdownChan = make(chan chan interface{}, 0)
+var logRotateChan = make(chan interface{}, 0)
 
 // LogService represents a named collection of related LogNotify objects
 // within a SrvLog and maintains the enabled flag for that named log.
@@ -264,6 +265,9 @@ func initLogs() {
 				shutdownComplete <- nil
 				return
 			case <-time.After(24 * time.Hour):
+				cycleLog()
+				newLog()
+			case <-logRotateChan:
 				cycleLog()
 				newLog()
 			}
