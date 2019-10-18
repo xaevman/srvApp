@@ -293,7 +293,11 @@ func catchCrash() {
 
 		select {
 		case <-crashChan:
-			if shuttingDown {
+			cfgLock.RLock()
+			isShuttingDown := shuttingDown
+			cfgLock.RUnlock()
+
+			if isShuttingDown {
 				return
 			}
 
@@ -387,6 +391,9 @@ func _shutdown() {
 
 // _signalShutdown asynchronously signals the application to shutdown.
 func _signalShutdown(returnCode int) {
+	cfgLock.Lock()
+	defer cfgLock.Unlock()
+
 	if shuttingDown {
 		return
 	}
