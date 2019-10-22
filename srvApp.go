@@ -264,7 +264,14 @@ func SignalShutdown(returnCode int) {
 	cfgLock.Lock()
 	defer cfgLock.Unlock()
 
-	_signalShutdown(returnCode)
+	if shuttingDown {
+		return
+	}
+
+	shuttingDown = true
+	exitCode = returnCode
+
+	appShutdown.Start()
 }
 
 // blockUntilShutdown does exactly what it sounds like, it blocks until
@@ -318,7 +325,7 @@ func catchSigInt() {
 		case <-c:
 			go func() {
 				defer crash.HandleAll()
-				_signalShutdown(0)
+				SignalShutdown(0)
 			}()
 		}
 	}()
@@ -387,21 +394,6 @@ func _shutdown() {
 	}
 
 	closeLogs()
-}
-
-// _signalShutdown asynchronously signals the application to shutdown.
-func _signalShutdown(returnCode int) {
-	cfgLock.Lock()
-	defer cfgLock.Unlock()
-
-	if shuttingDown {
-		return
-	}
-
-	shuttingDown = true
-	exitCode = returnCode
-
-	appShutdown.Start()
 }
 
 // startSingleton intializes the server process, attempting to make sure

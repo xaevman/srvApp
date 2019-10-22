@@ -101,7 +101,7 @@ func InstallSvc() {
 	scm, err := mgr.Connect()
 	if err != nil {
 		srvLog.Error("Error connecting to SCM: %v", err)
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
@@ -110,7 +110,7 @@ func InstallSvc() {
 	svc, err := scm.OpenService(app.GetName())
 	if err == nil {
 		srvLog.Error("Service already exists")
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
@@ -126,26 +126,26 @@ func InstallSvc() {
 
 	if err != nil {
 		srvLog.Error("Error creating service: %v", err)
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
 	err = xsvc.SetFailureFlags(syscall.Handle(svc.Handle))
 	if err != nil {
 		srvLog.Error("Error setting service recovery options: %v", err)
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
 	err = svc.Start()
 	if err != nil {
 		srvLog.Error("Error starting service: %v", err)
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
 	srvLog.Info("Service %s installed", app.GetName())
-	_signalShutdown(0)
+	SignalShutdown(0)
 }
 
 // uninstallSvc attempts to uninstall the running binary from the service
@@ -155,7 +155,7 @@ func UninstallSvc() {
 	scm, err := mgr.Connect()
 	if err != nil {
 		srvLog.Error("Error connecting to SCM: %v", err)
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
@@ -164,7 +164,7 @@ func UninstallSvc() {
 	s, err := scm.OpenService(app.GetName())
 	if err != nil {
 		srvLog.Error("Service %s doesn't exist", app.GetName())
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
@@ -174,12 +174,12 @@ func UninstallSvc() {
 	err = s.Delete()
 	if err != nil {
 		srvLog.Error("Error deleting service: %v", err)
-		_signalShutdown(1)
+		SignalShutdown(1)
 		return
 	}
 
 	srvLog.Info("Service %s deleted", app.GetName())
-	_signalShutdown(0)
+	SignalShutdown(0)
 }
 
 // afterFlags captures the service install and uninstall run modes
