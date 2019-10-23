@@ -14,6 +14,7 @@ package srvApp
 
 import (
 	"github.com/xaevman/crash"
+	"github.com/xaevman/shutdown"
 
 	"bufio"
 	"bytes"
@@ -45,6 +46,11 @@ const (
 	PRIVATE_HANDLER = iota
 	PUBLIC_HANDLER
 	ALL_HANDLER
+)
+
+// shutdown var
+var (
+	netShutdownSync = shutdown.New()
 )
 
 // config syncronization
@@ -254,6 +260,8 @@ func (this *HttpSrv) Configure(
 	this.publicMux.HonorXForwardedFor = honorXForwardedFor
 	this.privateMux.HonorXForwardedFor = honorXForwardedFor
 
+	localAddrsLock.Lock()
+	defer localAddrsLock.Unlock()
 	if privateChanged || forceRestart {
 		this.restartPrivateHttp()
 	}
@@ -274,6 +282,13 @@ func (this *HttpSrv) isIgnoreAddr(ip string) bool {
 }
 
 func (this *HttpSrv) IsPrivateNetwork(ip string) bool {
+	this.configLock.RLock()
+	defer this.configLock.RUnlock()
+
+	return this.isPrivateNetwork(ip)
+}
+
+func (this *HttpSrv) isPrivateNetwork(ip string) bool {
 	if this.isIgnoreAddr(ip) {
 		return false
 	}
@@ -411,9 +426,8 @@ func (this *HttpSrv) restartPrivateHttp() {
 	httpList := make(map[string]string)
 	TLSList := make(map[string]string)
 
-	localAddrsLock.RLock()
 	for x := range localAddrs {
-		if this.IsPrivateNetwork(localAddrs[x].String()) {
+		if this.isPrivateNetwork(localAddrs[x].String()) {
 			if this.privatePort > 0 {
 				httpAddr := net.JoinHostPort(
 					localAddrs[x].String(),
@@ -431,7 +445,6 @@ func (this *HttpSrv) restartPrivateHttp() {
 			}
 		}
 	}
-	localAddrsLock.RUnlock()
 
 	// shut down old listeners
 	for k := range this.privateListeners {
@@ -512,7 +525,6 @@ func (this *HttpSrv) restartPublicHttp() {
 	httpList := make(map[string]string)
 	TLSList := make(map[string]string)
 
-	localAddrsLock.RLock()
 	for x := range localAddrs {
 		local := false
 
@@ -542,7 +554,6 @@ func (this *HttpSrv) restartPublicHttp() {
 			}
 		}
 	}
-	localAddrsLock.RUnlock()
 
 	// shut down old listeners
 	for k := range this.publicListeners {
@@ -786,15 +797,22 @@ func netGetNetId() string {
 	return netId
 }
 
-func netInit() {
+func netEnumAddrs() int {
+	localAddrsLock.Lock()
+	defer localAddrsLock.Unlock()
+
+	currentAddrs := make(map[string]int)
+	for i := range localAddrs {
+		currentAddrs[localAddrs[i].String()] = -1
+	}
+
 	// populate list of local addresses
 	addrs, err := net.InterfaceAddrs()
 	if err != nil {
 		panic(err)
 	}
 
-	localAddrsLock.Lock()
-	localAddrs = make([]*net.IP, 0)
+	localAddrs = make([]*net.IP, 0, len(addrs))
 	for i := range addrs {
 		addrParts := strings.Split(addrs[i].String(), "/")
 		ip := net.ParseIP(addrParts[0])
@@ -807,10 +825,48 @@ func netInit() {
 		}
 
 		localAddrs = append(localAddrs, &ip)
+		currentAddrs[ip.String()]++
 	}
 
-	srvLog.Info("LocalAddresses: %v", localAddrs)
-	localAddrsLock.Unlock()
+	changeCount := 0
+	for k, v := range currentAddrs {
+		switch v {
+		case -1:
+			// deleted addr
+			changeCount++
+			srvLog.Info("NetAddr removed: %s", k)
+		case 1:
+			// new addr
+			changeCount++
+			srvLog.Info("NetAddr added: %s", k)
+		default:
+			// count 0 - same addr
+		}
+	}
+
+	return changeCount
+}
+
+func netInit() {
+	netEnumAddrs()
+
+	// monitor asynchronously for ip / interface changes
+	go func() {
+		defer crash.HandleAll()
+		defer netShutdownSync.Complete()
+
+		for {
+			select {
+			case <-time.After(1 * time.Minute):
+				changeCount := netEnumAddrs()
+				if changeCount > 0 {
+					cfgNet(AppConfig(), 0)
+				}
+			case <-netShutdownSync.Signal:
+				return
+			}
+		}
+	}()
 
 	// populate list of private address networks
 	privateNets = make([]*net.IPNet, 0)
@@ -952,6 +1008,10 @@ func netInit() {
 
 func netShutdown() {
 	httpSrv.Shutdown()
+
+	netShutdownSync.Start()
+	netShutdownSync.WaitForTimeout()
+
 	geoShutdown()
 	ipsShutdown()
 }
