@@ -98,6 +98,33 @@ func (this *SrvLog) Close() {
 	}
 }
 
+// FileLogBufferSizeB returns the current capacity of the underlying memory
+// buffer set aside for the file log
+func (this *SrvLog) FileLogBufferCap() int {
+	this.lock.RLock()
+	defer this.lock.RUnlock()
+
+	totalCap := 0
+
+	logBuffers := make(map[*flog.BufferedLog]interface{})
+	for k := range this.subs {
+		for i := range this.subs[k].notifiers {
+			l, isBufferedLog := this.subs[k].notifiers[i].(*flog.BufferedLog)
+			if isBufferedLog {
+				_, exists := logBuffers[l]
+				if exists {
+					continue
+				}
+
+				logBuffers[l] = nil
+				totalCap += l.BufferCap()
+			}
+		}
+	}
+
+	return totalCap
+}
+
 // Debug is a proxy which passes its arguments along to the underlying
 // debug flog instance.
 func (this *SrvLog) Debug(format string, v ...interface{}) {
