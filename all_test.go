@@ -35,7 +35,7 @@ func TestSrvInitAndShutdown(t *testing.T) {
 
 	go func() {
 		<-time.After(2 * time.Second)
-		_signalShutdown(0)
+		SignalShutdown(0)
 	}()
 
 	select {
