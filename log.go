@@ -14,12 +14,11 @@ package srvApp
 
 import (
 	"fmt"
-	"os"
-	"path"
 	"sort"
 	"sync"
 	"time"
 
+	"github.com/xaevman/crash"
 	"github.com/xaevman/log"
 	"github.com/xaevman/log/flog"
 	"github.com/xaevman/trace"
@@ -200,6 +199,40 @@ func (this *SrvLog) LogTo(local bool, name, format string, v ...interface{}) {
 	}
 }
 
+// Rotate runs flog.Rotate() on underlying BufferedLog instances
+func (this *SrvLog) Rotate() error {
+	this.lock.Lock()
+	defer this.lock.Unlock()
+
+	rotated := make(map[*flog.BufferedLog]*flog.BufferedLog)
+
+	for k, _ := range this.subs {
+		for i := range this.subs[k].notifiers {
+			oldLog, isBuffered := this.subs[k].notifiers[i].(*flog.BufferedLog)
+			if isBuffered {
+				newLog, alreadyRotated := rotated[oldLog]
+				if alreadyRotated {
+					this.subs[k].notifiers[i]= newLog
+				} else {
+					tmp, ok := flog.Rotate(oldLog).(*flog.BufferedLog)
+					if !ok {
+						return fmt.Errorf(
+							"failed to rotate log %s.%d. Unexpected type: %#v",
+							k,
+							i,
+							tmp,
+						)
+					}
+					this.subs[k].notifiers[i]= tmp
+					rotated[oldLog] = tmp
+				}
+			}
+		}
+	}
+
+	return nil
+}
+
 // SetDebugFlushIntervalSec sets the flush interval for the named log.
 func (this *SrvLog) SetFlushIntervalSec(name string, interval int32) {
 	this.lock.RLock()
@@ -283,41 +316,24 @@ func closeLogs() {
 // and then rotating logs once per day. The loop is broken once a shutdown
 // signal is received on the logShutdownChan channel.
 func initLogs() {
-	newLog()
-	go func() {
-		for {
-			select {
-			case shutdownComplete := <-logShutdownChan:
-				cycleLog()
-				shutdownComplete <- nil
-				return
-			case <-time.After(24 * time.Hour):
-				cycleLog()
-				newLog()
-			case <-logRotateChan:
-				cycleLog()
-				newLog()
-			}
-		}
-	}()
-}
-
-// newLog intializes the log buffer, console, and file-backed logging services
-// for the application.
-func newLog() {
 	logBuffer = log.NewLogBuffer(DefaultHttpLogBuffers)
 	srvLog = NewSrvLog()
 
 	trace.DebugLogger = srvLog
 	trace.ErrorLogger = srvLog
-}
 
-// cycleLog closes the log file and renames it to include a UTC unix timestamp
-func cycleLog() {
-	srvLog.Info("Log rotate")
-	srvLog.Close()
-
-	srcPath := path.Join(logDir, "all.log")
-	dstPath := fmt.Sprintf("%s.%d", srcPath, time.Now().UTC().Unix())
-	os.Rename(srcPath, dstPath)
+	go func() {
+		defer crash.HandleAll()
+		for {
+			select {
+			case shutdownComplete := <-logShutdownChan:
+				srvLog.Close()
+				shutdownComplete <- nil
+				return
+			case <-time.After(24 * time.Hour):
+			case <-logRotateChan:
+				srvLog.Rotate()
+			}
+		}
+	}()
 }

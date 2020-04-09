@@ -22,6 +22,8 @@ github.com/xaevman/log v0.0.0-20191112192212-62f743452d43 h1:f/qX4tPmDJCmg9ttWZy
 github.com/xaevman/log v0.0.0-20191112192212-62f743452d43/go.mod h1:bVUt1Ai0bHZ7lQuCv0LEXWYOphLVnz6ZbWTybvAOVCI=
 github.com/xaevman/log v0.0.0-20191112192418-6c3e8a1f4238 h1:eNroTRqcRrWfrD7EQgizzFOFRUK8ELAt5wl3p8aPrsw=
 github.com/xaevman/log v0.0.0-20191112192418-6c3e8a1f4238/go.mod h1:bVUt1Ai0bHZ7lQuCv0LEXWYOphLVnz6ZbWTybvAOVCI=
+github.com/xaevman/log v0.0.0-20200409203531-4b34e9e824b5 h1:Jt+Zw+Ef0bW8huqxFSCapHBiT4tmRRwJookakMQvaoI=
+github.com/xaevman/log v0.0.0-20200409203531-4b34e9e824b5/go.mod h1:bVUt1Ai0bHZ7lQuCv0LEXWYOphLVnz6ZbWTybvAOVCI=
 github.com/xaevman/shutdown v0.0.0-20170619171835-a5f6f007ccad h1:UAINgirvNYZqDihHfjUYzYwTEP4O3QuObziN01KrHT4=
 github.com/xaevman/shutdown v0.0.0-20170619171835-a5f6f007ccad/go.mod h1:gQaih+7gDfLsfT8SB99SHziOPYiTxibENRngI+G82mo=
 github.com/xaevman/shutdown v0.0.0-20191018173348-2d57b6d17dfe h1:A+IKMFghFszZ0blPsFvi/v3jxiqwM+sb2LRk0T9WqR0=
