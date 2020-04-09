@@ -2,6 +2,8 @@ github.com/mitchellh/go-ps v0.0.0-20170309133038-4fdf99ab2936 h1:kw1v0NlnN+GZcU8
 github.com/mitchellh/go-ps v0.0.0-20170309133038-4fdf99ab2936/go.mod h1:r1VsdOzOPt1ZSrGZWFoNhsAedKnEd6r9Np1+5blZCWk=
 github.com/mitchellh/go-ps v0.0.0-20190716172923-621e5597135b h1:9+ke9YJ9KGWw5ANXK6ozjoK47uI3uNbXv4YVINBnGm8=
 github.com/mitchellh/go-ps v0.0.0-20190716172923-621e5597135b/go.mod h1:r1VsdOzOPt1ZSrGZWFoNhsAedKnEd6r9Np1+5blZCWk=
+github.com/mitchellh/go-ps v1.0.0 h1:i6ampVEEF4wQFF+bkYfwYgY+F/uYJDktmvLPf7qIgjc=
+github.com/mitchellh/go-ps v1.0.0/go.mod h1:J4lOc8z8yJs6vUwklHw2XEIiT4z4C40KtWVN3nvg8Pg=
 github.com/xaevman/app v0.0.0-20151221185256-b8352f6c1f61 h1:Lzv3rkqwc9GESzXFjUK7KS3+Guboo2/O5VvfABr9xOA=
 github.com/xaevman/app v0.0.0-20151221185256-b8352f6c1f61/go.mod h1:g2BbyvW9yn8YwhKGV7gerVE1ILiIEK5DAKxuLbD9FTo=
 github.com/xaevman/app v0.0.0-20190208024703-544c5d335566 h1:aRdAfXMG18xYmgt6mxfxwol/2mEaqLqEkrrVdU1S+Es=

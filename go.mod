@@ -1,7 +1,7 @@
 module github.com/xaevman/srvApp
 
 require (
-	github.com/mitchellh/go-ps v0.0.0-20190716172923-621e5597135b // indirect
+	github.com/mitchellh/go-ps v1.0.0 // indirect
 	github.com/xaevman/app v0.0.0-20190930184519-24995558fb46
 	github.com/xaevman/counters v0.0.0-20180726222205-47700f82e94f
 	github.com/xaevman/crash v0.0.0-20190412235221-124900ccf870
