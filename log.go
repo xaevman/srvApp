@@ -206,13 +206,13 @@ func (this *SrvLog) Rotate() error {
 
 	rotated := make(map[*flog.BufferedLog]*flog.BufferedLog)
 
-	for k, _ := range this.subs {
+	for k := range this.subs {
 		for i := range this.subs[k].notifiers {
 			oldLog, isBuffered := this.subs[k].notifiers[i].(*flog.BufferedLog)
 			if isBuffered {
 				newLog, alreadyRotated := rotated[oldLog]
 				if alreadyRotated {
-					this.subs[k].notifiers[i]= newLog
+					this.subs[k].notifiers[i] = newLog
 				} else {
 					tmp, ok := flog.Rotate(oldLog).(*flog.BufferedLog)
 					if !ok {
@@ -223,7 +223,7 @@ func (this *SrvLog) Rotate() error {
 							tmp,
 						)
 					}
-					this.subs[k].notifiers[i]= tmp
+					this.subs[k].notifiers[i] = tmp
 					rotated[oldLog] = tmp
 				}
 			}
@@ -331,6 +331,7 @@ func initLogs() {
 				shutdownComplete <- nil
 				return
 			case <-time.After(24 * time.Hour):
+				srvLog.Rotate()
 			case <-logRotateChan:
 				srvLog.Rotate()
 			}
