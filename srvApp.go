@@ -264,6 +264,10 @@ func SignalShutdown(returnCode int) {
 	cfgLock.Lock()
 	defer cfgLock.Unlock()
 
+	_signalShutdown(returnCode)
+}
+
+func _signalShutdown(returnCode int) {
 	if shuttingDown {
 		return
 	}

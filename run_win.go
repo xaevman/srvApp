@@ -96,12 +96,15 @@ func (this *appSvc) Execute(
 }
 
 // installSvc attempts to install the running binary as a windows service.
+// When InstallSvc is called, we are under a config lock during
+// app initialization, so it is necessary to call the unsafe _signalShutdown() function
+// instead
 func InstallSvc() {
 	srvLog.Info("Installing service %s", app.GetName())
 	scm, err := mgr.Connect()
 	if err != nil {
 		srvLog.Error("Error connecting to SCM: %v", err)
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
@@ -110,7 +113,7 @@ func InstallSvc() {
 	svc, err := scm.OpenService(app.GetName())
 	if err == nil {
 		srvLog.Error("Service already exists")
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
@@ -126,36 +129,38 @@ func InstallSvc() {
 
 	if err != nil {
 		srvLog.Error("Error creating service: %v", err)
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
 	err = xsvc.SetFailureFlags(syscall.Handle(svc.Handle))
 	if err != nil {
 		srvLog.Error("Error setting service recovery options: %v", err)
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
 	err = svc.Start()
 	if err != nil {
 		srvLog.Error("Error starting service: %v", err)
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
 	srvLog.Info("Service %s installed", app.GetName())
-	SignalShutdown(0)
+	_signalShutdown(0)
 }
 
 // uninstallSvc attempts to uninstall the running binary from the service
-// control manager.
+// control manager. When UninstallSvc is called, we are under a config lock during
+// app initialization, so it is necessary to call the unsafe _signalShutdown() function
+// instead
 func UninstallSvc() {
 	srvLog.Info("Removing service %s", app.GetName())
 	scm, err := mgr.Connect()
 	if err != nil {
 		srvLog.Error("Error connecting to SCM: %v", err)
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
@@ -164,7 +169,7 @@ func UninstallSvc() {
 	s, err := scm.OpenService(app.GetName())
 	if err != nil {
 		srvLog.Error("Service %s doesn't exist", app.GetName())
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
@@ -174,12 +179,12 @@ func UninstallSvc() {
 	err = s.Delete()
 	if err != nil {
 		srvLog.Error("Error deleting service: %v", err)
-		SignalShutdown(1)
+		_signalShutdown(1)
 		return
 	}
 
 	srvLog.Info("Service %s deleted", app.GetName())
-	SignalShutdown(0)
+	_signalShutdown(0)
 }
 
 // afterFlags captures the service install and uninstall run modes
