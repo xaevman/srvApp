@@ -11,7 +11,7 @@ require (
 	github.com/xaevman/str v0.0.0-20190412235629-55065b689228 // indirect
 	github.com/xaevman/trace v0.0.0-20170619171817-54d504b4cd27
 	github.com/xaevman/win32 v0.0.0-20171020222159-1eed552269eb
-	golang.org/x/sys v0.0.0-20190201152629-afcc84fd7533
+	golang.org/x/sys v0.1.0
 )
 
 go 1.13
